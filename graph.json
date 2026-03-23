@@ -1,0 +1,575 @@
+{
+  "graph_id": "tv_graphics_production",
+
+  "state_schema": {
+    "input": "object",
+    "brief": "object",
+    "classification": "object",
+    "result": "object",
+    "approval": "object",
+    "approval_status": "string",
+    "review_comments": "array",
+    "iteration_count": "integer",
+    "log": "array",
+    "error": "object"
+  },
+
+  "tools": [
+    {
+      "id": "workflow.create_request",
+      "kind": "unresolved",
+      "description": "Create request in workflow registry and start SLA tracking",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "transport": {
+        "server": null,
+        "tool_name": null
+      }
+    },
+    {
+      "id": "workflow.send_clarification",
+      "kind": "unresolved",
+      "description": "Send clarification questions to editorial team and attach links/files context",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "transport": {
+        "server": null,
+        "tool_name": null
+      }
+    },
+    {
+      "id": "ai.generate_draft",
+      "kind": "unresolved",
+      "description": "Generate AI draft assets or variants using templates and external generation tools",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "transport": {
+        "server": null,
+        "tool_name": null
+      }
+    },
+    {
+      "id": "design.finalize_asset",
+      "kind": "unresolved",
+      "description": "Finalize draft in designer tools such as VizRT, Photoshop, Illustrator, After Effects or Cinema 4D",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "transport": {
+        "server": null,
+        "tool_name": null
+      }
+    },
+    {
+      "id": "design.apply_revisions",
+      "kind": "unresolved",
+      "description": "Apply editorial revisions and produce updated asset version",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "transport": {
+        "server": null,
+        "tool_name": null
+      }
+    },
+    {
+      "id": "broadcast.deploy_rt",
+      "kind": "unresolved",
+      "description": "Deliver approved RT asset to broadcast system such as Cosmedia/VizRT",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "transport": {
+        "server": null,
+        "tool_name": null
+      }
+    },
+    {
+      "id": "storage.publish_asset",
+      "kind": "unresolved",
+      "description": "Publish final Collage or Motion asset to server/Drop with version metadata",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "transport": {
+        "server": null,
+        "tool_name": null
+      }
+    },
+    {
+      "id": "editing.send_links",
+      "kind": "unresolved",
+      "description": "Send final asset links to editing/montage workflow",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "transport": {
+        "server": null,
+        "tool_name": null
+      }
+    },
+    {
+      "id": "workflow.close_request",
+      "kind": "unresolved",
+      "description": "Close request by actual usage and store completion status",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "transport": {
+        "server": null,
+        "tool_name": null
+      }
+    }
+  ],
+
+  "nodes": [
+    {
+      "id": "register_request",
+      "kind": "tool",
+      "inputs": {
+        "request": "$state.input"
+      },
+      "outputs": {
+        "result": "$result"
+      },
+      "config": {},
+      "tool_ref": "workflow.create_request"
+    },
+    {
+      "id": "build_ai_brief",
+      "kind": "llm",
+      "inputs": {
+        "request": "$state.input"
+      },
+      "outputs": {
+        "brief": "$result"
+      },
+      "config": {
+        "model": "gpt-4.1",
+        "system_prompt": "Ты AI-дизайнер intake-этапа. Из сырой заявки сформируй структурированный AI-бриф, выдели обязательные поля, недостающие данные, рекомендуемый тип задачи, срочность и confidence. Верни только JSON.",
+        "prompt_template": "Сырая заявка: {{request}}",
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "normalized_brief": {
+              "type": "object"
+            },
+            "missing_fields": {
+              "type": "array"
+            },
+            "recommended_type": {
+              "type": "string"
+            },
+            "recommended_urgency": {
+              "type": "string"
+            },
+            "confidence": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "normalized_brief",
+            "missing_fields",
+            "recommended_type",
+            "recommended_urgency",
+            "confidence"
+          ]
+        }
+      },
+      "tool_ref": null
+    },
+    {
+      "id": "validate_brief",
+      "kind": "function",
+      "inputs": {
+        "brief": "$state.brief"
+      },
+      "outputs": {
+        "result": "$result"
+      },
+      "config": {
+        "handler": "brief.validate"
+      },
+      "tool_ref": null
+    },
+    {
+      "id": "request_clarification",
+      "kind": "tool",
+      "inputs": {
+        "request": "$state.input",
+        "brief": "$state.brief"
+      },
+      "outputs": {
+        "result": "$result"
+      },
+      "config": {},
+      "tool_ref": "workflow.send_clarification"
+    },
+    {
+      "id": "classify_and_route",
+      "kind": "function",
+      "inputs": {
+        "brief": "$state.brief",
+        "validation": "$state.result"
+      },
+      "outputs": {
+        "classification": "$result"
+      },
+      "config": {
+        "handler": "routing.classify_and_route"
+      },
+      "tool_ref": null
+    },
+    {
+      "id": "check_priority_conflict",
+      "kind": "function",
+      "inputs": {
+        "classification": "$state.classification"
+      },
+      "outputs": {
+        "result": "$result"
+      },
+      "config": {
+        "handler": "priority.check_conflict"
+      },
+      "tool_ref": null
+    },
+    {
+      "id": "resolve_priority_conflict",
+      "kind": "approval",
+      "inputs": {
+        "classification": "$state.classification",
+        "conflict": "$state.result"
+      },
+      "outputs": {
+        "approval": "$result"
+      },
+      "config": {
+        "message_template": "Обнаружен конфликт приоритетов. Подтвердите приоритет и перераспределение ресурсов."
+      },
+      "tool_ref": null
+    },
+    {
+      "id": "assign_executor",
+      "kind": "function",
+      "inputs": {
+        "classification": "$state.classification",
+        "approval": "$state.approval"
+      },
+      "outputs": {
+        "result": "$result"
+      },
+      "config": {
+        "handler": "routing.assign_executor"
+      },
+      "tool_ref": null
+    },
+    {
+      "id": "generate_draft",
+      "kind": "tool",
+      "inputs": {
+        "brief": "$state.brief",
+        "classification": "$state.classification",
+        "assignment": "$state.result"
+      },
+      "outputs": {
+        "result": "$result"
+      },
+      "config": {},
+      "tool_ref": "ai.generate_draft"
+    },
+    {
+      "id": "finalize_asset",
+      "kind": "tool",
+      "inputs": {
+        "draft": "$state.result",
+        "classification": "$state.classification"
+      },
+      "outputs": {
+        "result": "$result"
+      },
+      "config": {},
+      "tool_ref": "design.finalize_asset"
+    },
+    {
+      "id": "editorial_review",
+      "kind": "approval",
+      "inputs": {
+        "asset": "$state.result",
+        "classification": "$state.classification"
+      },
+      "outputs": {
+        "approval": "$result",
+        "approval_status": "$result.status",
+        "review_comments": "$result.comments"
+      },
+      "config": {
+        "message_template": "Проверьте графику и укажите: OK или правки. Перед эфиром/публикацией требуется явное человеческое подтверждение."
+      },
+      "tool_ref": null
+    },
+    {
+      "id": "apply_revisions",
+      "kind": "tool",
+      "inputs": {
+        "asset": "$state.result",
+        "comments": "$state.review_comments",
+        "classification": "$state.classification"
+      },
+      "outputs": {
+        "result": "$result"
+      },
+      "config": {},
+      "tool_ref": "design.apply_revisions"
+    },
+    {
+      "id": "deliver_rt_to_air",
+      "kind": "tool",
+      "inputs": {
+        "asset": "$state.result",
+        "classification": "$state.classification"
+      },
+      "outputs": {
+        "result": "$result"
+      },
+      "config": {},
+      "tool_ref": "broadcast.deploy_rt"
+    },
+    {
+      "id": "publish_non_rt_asset",
+      "kind": "tool",
+      "inputs": {
+        "asset": "$state.result",
+        "classification": "$state.classification"
+      },
+      "outputs": {
+        "result": "$result"
+      },
+      "config": {},
+      "tool_ref": "storage.publish_asset"
+    },
+    {
+      "id": "handoff_to_editing",
+      "kind": "tool",
+      "inputs": {
+        "published_asset": "$state.result"
+      },
+      "outputs": {
+        "result": "$result"
+      },
+      "config": {},
+      "tool_ref": "editing.send_links"
+    },
+    {
+      "id": "close_request",
+      "kind": "tool",
+      "inputs": {
+        "request": "$state.input",
+        "delivery_result": "$state.result",
+        "approval": "$state.approval"
+      },
+      "outputs": {
+        "result": "$result"
+      },
+      "config": {},
+      "tool_ref": "workflow.close_request"
+    }
+  ],
+
+  "edges": [
+    {
+      "from": "START",
+      "to": "register_request",
+      "type": "direct"
+    },
+    {
+      "from": "register_request",
+      "to": "build_ai_brief",
+      "type": "direct"
+    },
+    {
+      "from": "build_ai_brief",
+      "to": "validate_brief",
+      "type": "direct"
+    },
+    {
+      "from": "validate_brief",
+      "type": "conditional",
+      "conditions": [
+        {
+          "when": {
+            "==": [
+              {
+                "var": "result.is_complete"
+              },
+              false
+            ]
+          },
+          "to": "request_clarification"
+        },
+        {
+          "when": true,
+          "to": "classify_and_route"
+        }
+      ]
+    },
+    {
+      "from": "request_clarification",
+      "to": "build_ai_brief",
+      "type": "direct"
+    },
+    {
+      "from": "classify_and_route",
+      "to": "check_priority_conflict",
+      "type": "direct"
+    },
+    {
+      "from": "check_priority_conflict",
+      "type": "conditional",
+      "conditions": [
+        {
+          "when": {
+            "==": [
+              {
+                "var": "result.has_conflict"
+              },
+              true
+            ]
+          },
+          "to": "resolve_priority_conflict"
+        },
+        {
+          "when": true,
+          "to": "assign_executor"
+        }
+      ]
+    },
+    {
+      "from": "resolve_priority_conflict",
+      "to": "assign_executor",
+      "type": "direct"
+    },
+    {
+      "from": "assign_executor",
+      "to": "generate_draft",
+      "type": "direct"
+    },
+    {
+      "from": "generate_draft",
+      "to": "finalize_asset",
+      "type": "direct"
+    },
+    {
+      "from": "finalize_asset",
+      "to": "editorial_review",
+      "type": "direct"
+    },
+    {
+      "from": "editorial_review",
+      "type": "conditional",
+      "conditions": [
+        {
+          "when": {
+            "==": [
+              {
+                "var": "approval_status"
+              },
+              "changes_requested"
+            ]
+          },
+          "to": "apply_revisions"
+        },
+        {
+          "when": {
+            "==": [
+              {
+                "var": "approval_status"
+              },
+              "approved"
+            ]
+          },
+          "to": "deliver_rt_to_air"
+        },
+        {
+          "when": true,
+          "to": "END"
+        }
+      ]
+    },
+    {
+      "from": "apply_revisions",
+      "to": "editorial_review",
+      "type": "direct"
+    },
+    {
+      "from": "deliver_rt_to_air",
+      "type": "conditional",
+      "conditions": [
+        {
+          "when": {
+            "==": [
+              {
+                "var": "classification.type"
+              },
+              "rt"
+            ]
+          },
+          "to": "close_request"
+        },
+        {
+          "when": true,
+          "to": "publish_non_rt_asset"
+        }
+      ]
+    },
+    {
+      "from": "publish_non_rt_asset",
+      "to": "handoff_to_editing",
+      "type": "direct"
+    },
+    {
+      "from": "handoff_to_editing",
+      "to": "close_request",
+      "type": "direct"
+    },
+    {
+      "from": "close_request",
+      "to": "END",
+      "type": "direct"
+    }
+  ],
+
+  "execution": {
+    "requires_checkpointer": true
+  }
+}
