@@ -1,0 +1,155 @@
+{
+  "graph_id": "request_flow_v1",
+  "state_schema": {
+    "input": "object",
+    "classification": "object",
+    "result": "object",
+    "approval": "object",
+    "error": "object"
+  },
+  "tools": [
+    {
+      "id": "tasks.create_task",
+      "kind": "local",
+      "description": "Create task locally",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "transport": {
+        "handler": "langgraph_spec_compiler.example_local_tool",
+        "server": null,
+        "tool_name": null
+      }
+    }
+  ],
+  "nodes": [
+    {
+      "id": "normalize_input",
+      "kind": "function",
+      "inputs": {
+        "raw": "$state.input"
+      },
+      "outputs": {
+        "input": "$result"
+      },
+      "config": {
+        "handler": "langgraph_spec_compiler.sample_normalize_input"
+      },
+      "tool_ref": null
+    },
+    {
+      "id": "classify",
+      "kind": "llm",
+      "inputs": {
+        "text": "$state.input.text"
+      },
+      "outputs": {
+        "classification": "$result"
+      },
+      "config": {
+        "runner": "langgraph_spec_compiler.example_llm_runner",
+        "model": "gpt-4.1",
+        "system_prompt": "Return JSON",
+        "prompt_template": "Text: {{text}}",
+        "output_schema": {
+          "type": "object"
+        }
+      },
+      "tool_ref": null
+    },
+    {
+      "id": "policy_gate",
+      "kind": "function",
+      "inputs": {
+        "classification": "$state.classification"
+      },
+      "outputs": {
+        "result": "$result"
+      },
+      "config": {
+        "handler": "langgraph_spec_compiler.sample_policy_decide"
+      },
+      "tool_ref": null
+    },
+    {
+      "id": "create_task",
+      "kind": "tool",
+      "inputs": {
+        "title": "$state.classification.extracted_fields.title"
+      },
+      "outputs": {
+        "result": "$result"
+      },
+      "config": {},
+      "tool_ref": "tasks.create_task"
+    },
+    {
+      "id": "human_review",
+      "kind": "approval",
+      "inputs": {
+        "classification": "$state.classification"
+      },
+      "outputs": {
+        "approval": "$result"
+      },
+      "config": {
+        "message_template": "Review and approve"
+      },
+      "tool_ref": null
+    }
+  ],
+  "edges": [
+    {
+      "from": "START",
+      "to": "normalize_input",
+      "type": "direct"
+    },
+    {
+      "from": "normalize_input",
+      "to": "classify",
+      "type": "direct"
+    },
+    {
+      "from": "classify",
+      "to": "policy_gate",
+      "type": "direct"
+    },
+    {
+      "from": "policy_gate",
+      "type": "conditional",
+      "conditions": [
+        {
+          "when": {
+            "==": [
+              {
+                "var": "result.route"
+              },
+              "tool"
+            ]
+          },
+          "to": "create_task"
+        },
+        {
+          "when": true,
+          "to": "human_review"
+        }
+      ]
+    },
+    {
+      "from": "create_task",
+      "to": "END",
+      "type": "direct"
+    },
+    {
+      "from": "human_review",
+      "to": "END",
+      "type": "direct"
+    }
+  ],
+  "execution": {
+    "requires_checkpointer": true
+  }
+}
