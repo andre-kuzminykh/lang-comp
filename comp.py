@@ -284,18 +284,21 @@ def _is_entrypoint(node_id: str, spec: Dict[str, Any]) -> bool:
 # Path resolution
 # ---------------------------
 
-def deep_get(data: Mapping[str, Any], path: str) -> Any:
+def deep_get(data: Mapping[str, Any], path: str, default: Any = None) -> Any:
     current: Any = data
     for part in path.split("."):
         if isinstance(current, Mapping):
             if part not in current:
-                raise KeyError(f"Missing key {part!r} while resolving path {path!r}")
+                return default
             current = current[part]
         elif isinstance(current, list):
-            idx = int(part)
-            current = current[idx]
+            try:
+                idx = int(part)
+                current = current[idx]
+            except (ValueError, IndexError):
+                return default
         else:
-            raise KeyError(f"Cannot descend into non-container at {part!r} for path {path!r}")
+            return default
     return current
 
 
