@@ -387,9 +387,11 @@ class GraphSpecCompiler:
         self,
         registry: Optional[LocalRegistry] = None,
         default_llm_runner: Optional[str] = None,
+        default_retrieval_runner: Optional[str] = None,
     ) -> None:
         self.registry = registry or LocalRegistry()
         self.default_llm_runner = default_llm_runner
+        self.default_retrieval_runner = default_retrieval_runner
 
     def compile_spec(self, spec: Dict[str, Any], *, checkpointer: Any = None):
         if _IMPORT_ERROR is not None:
@@ -473,9 +475,11 @@ class GraphSpecCompiler:
             return node
 
         if kind == "retrieval":
-            retrieval_name = node_spec["config"].get("runner")
+            retrieval_name = node_spec["config"].get("runner") or self.default_retrieval_runner
             if not retrieval_name:
-                raise RegistryError(f"Retrieval node {node_spec['id']} must define config.runner")
+                raise RegistryError(
+                    f"Retrieval node {node_spec['id']} has no config.runner and no default_retrieval_runner was provided"
+                )
             retrieval_runner = self.registry.get_retrieval(retrieval_name)
 
             def node(state: Dict[str, Any]) -> Dict[str, Any]:
@@ -759,7 +763,13 @@ def _auto_registry_from_spec(spec: Dict[str, Any]) -> tuple:
         return {k: v for k, v in inputs.items()}
 
     llm_runner_name = "auto_llm_runner"
+    retrieval_runner_name = "auto_retrieval_runner"
     registry.register_llm_runner(llm_runner_name, _stub_llm)
+
+    def _stub_retrieval(config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
+        return {"documents": [{"source": "stub", "score": 0.9, "text": "stub doc"}]}
+
+    registry.register_retrieval(retrieval_runner_name, _stub_retrieval)
 
     for node in spec.get("nodes", []):
         kind = node["kind"]
@@ -778,11 +788,9 @@ def _auto_registry_from_spec(spec: Dict[str, Any]) -> tuple:
         elif kind == "retrieval":
             runner = node["config"].get("runner")
             if runner and runner not in registry.retrievals:
-                def _stub_retrieval(config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
-                    return {"documents": [{"source": "stub", "score": 0.9, "text": "stub doc"}]}
-                registry.register_retrieval(runner, _stub_retrieval)
+                registry.register_retrieval(runner or retrieval_runner_name, _stub_retrieval)
 
-    return registry, llm_runner_name
+    return registry, llm_runner_name, retrieval_runner_name
 
 
 def _live_registry_from_spec(spec: Dict[str, Any]) -> tuple:
@@ -893,7 +901,13 @@ def _live_registry_from_spec(spec: Dict[str, Any]) -> tuple:
 
     # Register LLM runner
     llm_runner_name = "openai_live"
+    retrieval_runner_name = "live_retrieval_runner"
     registry.register_llm_runner(llm_runner_name, openai_llm_runner)
+
+    def _stub_retrieval(config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
+        return {"documents": [{"source": "stub", "score": 0.9, "text": "stub doc"}]}
+
+    registry.register_retrieval(retrieval_runner_name, _stub_retrieval)
 
     # Scan spec and register handlers
     for node in spec.get("nodes", []):
@@ -913,11 +927,9 @@ def _live_registry_from_spec(spec: Dict[str, Any]) -> tuple:
         elif kind == "retrieval":
             runner = node["config"].get("runner")
             if runner and runner not in registry.retrievals:
-                def _stub_retrieval(config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
-                    return {"documents": [{"source": "stub", "score": 0.9, "text": "stub doc"}]}
-                registry.register_retrieval(runner, _stub_retrieval)
+                registry.register_retrieval(runner or retrieval_runner_name, _stub_retrieval)
 
-    return registry, llm_runner_name, interactive_approval_handler
+    return registry, llm_runner_name, retrieval_runner_name, interactive_approval_handler
 
 
 def _make_default_registry() -> LocalRegistry:
@@ -966,11 +978,11 @@ def main() -> None:
     interactive_approval = None
 
     if args.live:
-        registry, default_llm, interactive_approval = _live_registry_from_spec(spec)
-        compiler = GraphSpecCompiler(registry, default_llm_runner=default_llm)
+        registry, default_llm, default_retrieval, interactive_approval = _live_registry_from_spec(spec)
+        compiler = GraphSpecCompiler(registry, default_llm_runner=default_llm, default_retrieval_runner=default_retrieval)
     elif args.auto:
-        registry, default_llm = _auto_registry_from_spec(spec)
-        compiler = GraphSpecCompiler(registry, default_llm_runner=default_llm)
+        registry, default_llm, default_retrieval = _auto_registry_from_spec(spec)
+        compiler = GraphSpecCompiler(registry, default_llm_runner=default_llm, default_retrieval_runner=default_retrieval)
     else:
         registry = _make_default_registry()
         compiler = GraphSpecCompiler(registry)
