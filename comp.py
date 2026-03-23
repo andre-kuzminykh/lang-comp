@@ -724,6 +724,67 @@ EXAMPLE_SPEC = {
 }
 
 
+def _auto_registry_from_spec(spec: Dict[str, Any]) -> tuple:
+    """
+    Scan a graph spec and auto-register stub handlers for every node.
+    Returns (registry, default_llm_runner_name).
+    """
+    registry = LocalRegistry()
+
+    # Generic stubs
+    def _stub_llm(config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
+        schema = config.get("output_schema", {})
+        props = schema.get("properties", {})
+        result: Dict[str, Any] = {}
+        for key, prop in props.items():
+            t = prop.get("type", "string")
+            if t == "object":
+                result[key] = {"stub": True}
+            elif t == "array":
+                result[key] = []
+            elif t == "number":
+                result[key] = 0.92
+            elif t == "integer":
+                result[key] = 0
+            elif t == "boolean":
+                result[key] = True
+            else:
+                result[key] = f"stub_{key}"
+        return result or {"stub": True}
+
+    def _stub_tool(_tool_spec: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
+        return {"ok": True, "tool": _tool_spec.get("id", "unknown"), "echo": inputs, "id": "auto_001"}
+
+    def _stub_function(inputs: Dict[str, Any]) -> Dict[str, Any]:
+        return {k: v for k, v in inputs.items()}
+
+    llm_runner_name = "auto_llm_runner"
+    registry.register_llm_runner(llm_runner_name, _stub_llm)
+
+    for node in spec.get("nodes", []):
+        kind = node["kind"]
+        if kind == "function":
+            handler = node["config"]["handler"]
+            if handler not in registry.functions:
+                registry.register_function(handler, _stub_function)
+        elif kind == "llm":
+            runner = node["config"].get("runner")
+            if runner and runner not in registry.llm_runners:
+                registry.register_llm_runner(runner, _stub_llm)
+        elif kind == "tool":
+            tool_ref = node.get("tool_ref")
+            if tool_ref and tool_ref not in registry.tools:
+                registry.register_tool(tool_ref, _stub_tool)
+        elif kind == "retrieval":
+            runner = node["config"].get("runner")
+            if runner and runner not in registry.retrievals:
+                def _stub_retrieval(config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
+                    return {"documents": [{"source": "stub", "score": 0.9, "text": "stub doc"}]}
+                registry.register_retrieval(runner, _stub_retrieval)
+
+    return registry, llm_runner_name
+
+
 def _make_default_registry() -> LocalRegistry:
     registry = LocalRegistry()
     registry.register_function("langgraph_spec_compiler.sample_normalize_input", sample_normalize_input)
@@ -749,6 +810,9 @@ def main() -> None:
     parser.add_argument("--print-mermaid", action="store_true", help="Print Mermaid graph if supported")
     parser.add_argument("--invoke", action="store_true", help="Invoke the graph after compilation using --input-json")
     parser.add_argument("--input-json", type=str, help='JSON string passed to graph.invoke, e.g. \'{"input":{"text":"create task"}}\'')
+    parser.add_argument("--auto", action="store_true",
+                        help="Auto-generate stub handlers for all nodes and run the graph. "
+                             "Works with any spec JSON without manual handler registration.")
     args = parser.parse_args()
 
     if args.write_example:
@@ -761,8 +825,14 @@ def main() -> None:
         parser.error("--spec is required unless --write-example is used")
 
     spec = load_spec(args.spec)
-    registry = _make_default_registry()
-    compiler = GraphSpecCompiler(registry)
+
+    if args.auto:
+        registry, default_llm = _auto_registry_from_spec(spec)
+        compiler = GraphSpecCompiler(registry, default_llm_runner=default_llm)
+    else:
+        registry = _make_default_registry()
+        compiler = GraphSpecCompiler(registry)
+
     graph = compiler.compile_spec(spec)
 
     print(f"Compiled graph: {spec['graph_id']}")
@@ -770,12 +840,26 @@ def main() -> None:
     if args.print_mermaid:
         _print_mermaid(graph)
 
-    if args.invoke:
-        if not args.input_json:
-            parser.error("--invoke requires --input-json")
-        payload = json.loads(args.input_json)
+    if args.invoke or args.auto:
+        payload = json.loads(args.input_json) if args.input_json else {"input": {"text": "test"}}
         config = {"configurable": {"thread_id": "cli-thread-1"}}
-        result = graph.invoke(payload, config=config)
+
+        if interrupt is not None:
+            # Handle interrupt loops (approval nodes) automatically in --auto mode
+            from langgraph.types import Command
+            result = graph.invoke(payload, config=config)
+            if args.auto:
+                for _ in range(10):
+                    state = graph.get_state(config)
+                    if not state.tasks or not any(t.interrupts for t in state.tasks):
+                        break
+                    for task in state.tasks:
+                        if task.interrupts:
+                            print(f"[auto-approve] {task.name}: {task.interrupts[0].value.get('message', '')}")
+                            result = graph.invoke(Command(resume={"status": "approved", "comments": []}), config=config)
+        else:
+            result = graph.invoke(payload, config=config)
+
         print(json.dumps(result, ensure_ascii=False, indent=2))
 
 
