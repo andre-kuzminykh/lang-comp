@@ -16,9 +16,9 @@
 
   "tools": [
     {
-      "id": "workflow.create_request",
+      "id": "workflow.register_request",
       "kind": "unresolved",
-      "description": "Create request in workflow registry and start SLA tracking",
+      "description": "Create request in unified workflow registry and start SLA tracking.",
       "input_schema": {
         "type": "object"
       },
@@ -31,9 +31,9 @@
       }
     },
     {
-      "id": "workflow.send_clarification",
+      "id": "workflow.assign_executor",
       "kind": "unresolved",
-      "description": "Send clarification questions to editorial team and attach links/files context",
+      "description": "Assign request to a specific executor or queue based on route and workload.",
       "input_schema": {
         "type": "object"
       },
@@ -46,9 +46,9 @@
       }
     },
     {
-      "id": "ai.generate_draft",
+      "id": "vizrt.create_draft",
       "kind": "unresolved",
-      "description": "Generate AI draft assets or variants using templates and external generation tools",
+      "description": "Create RT draft asset in VizRT using template and payload.",
       "input_schema": {
         "type": "object"
       },
@@ -61,9 +61,9 @@
       }
     },
     {
-      "id": "design.finalize_asset",
+      "id": "drop.publish_draft",
       "kind": "unresolved",
-      "description": "Finalize draft in designer tools such as VizRT, Photoshop, Illustrator, After Effects or Cinema 4D",
+      "description": "Publish collage or motion draft package, previews, and versions to Drop/server.",
       "input_schema": {
         "type": "object"
       },
@@ -76,9 +76,9 @@
       }
     },
     {
-      "id": "design.apply_revisions",
+      "id": "vizrt.publish_final",
       "kind": "unresolved",
-      "description": "Apply editorial revisions and produce updated asset version",
+      "description": "Publish finalized RT asset to VizRT or linked RT asset store.",
       "input_schema": {
         "type": "object"
       },
@@ -91,9 +91,9 @@
       }
     },
     {
-      "id": "broadcast.deploy_rt",
+      "id": "drop.publish_final",
       "kind": "unresolved",
-      "description": "Deliver approved RT asset to broadcast system such as Cosmedia/VizRT",
+      "description": "Publish finalized collage or motion files to server/Drop with version metadata.",
       "input_schema": {
         "type": "object"
       },
@@ -106,9 +106,9 @@
       }
     },
     {
-      "id": "storage.publish_asset",
+      "id": "cosmedia.deploy_asset",
       "kind": "unresolved",
-      "description": "Publish final Collage or Motion asset to server/Drop with version metadata",
+      "description": "Deploy approved RT asset to on-air system.",
       "input_schema": {
         "type": "object"
       },
@@ -121,9 +121,9 @@
       }
     },
     {
-      "id": "editing.send_links",
+      "id": "nle.send_links",
       "kind": "unresolved",
-      "description": "Send final asset links to editing/montage workflow",
+      "description": "Send final asset links and metadata to editing/NLE.",
       "input_schema": {
         "type": "object"
       },
@@ -138,7 +138,7 @@
     {
       "id": "workflow.close_request",
       "kind": "unresolved",
-      "description": "Close request by actual usage and store completion status",
+      "description": "Close request and persist completion facts and delivery outcome.",
       "input_schema": {
         "type": "object"
       },
@@ -163,7 +163,7 @@
         "result": "$result"
       },
       "config": {},
-      "tool_ref": "workflow.create_request"
+      "tool_ref": "workflow.register_request"
     },
     {
       "id": "build_ai_brief",
@@ -176,8 +176,8 @@
       },
       "config": {
         "model": "gpt-4.1",
-        "system_prompt": "Ты AI-дизайнер intake-этапа. Из сырой заявки сформируй структурированный AI-бриф, выдели обязательные поля, недостающие данные, рекомендуемый тип задачи, срочность и confidence. Верни только JSON.",
-        "prompt_template": "Сырая заявка: {{request}}",
+        "system_prompt": "Ты преобразуешь сырую заявку на телевизионную графику в структурированный AI-бриф. Верни только JSON. Извлеки обязательные поля, недостающие поля, рекомендованный тип задачи, срочность и confidence.",
+        "prompt_template": "Raw request: {{request}}",
         "output_schema": {
           "type": "object",
           "properties": {
@@ -187,10 +187,10 @@
             "missing_fields": {
               "type": "array"
             },
-            "recommended_type": {
+            "recommended_route": {
               "type": "string"
             },
-            "recommended_urgency": {
+            "urgency": {
               "type": "string"
             },
             "confidence": {
@@ -200,8 +200,8 @@
           "required": [
             "normalized_brief",
             "missing_fields",
-            "recommended_type",
-            "recommended_urgency",
+            "recommended_route",
+            "urgency",
             "confidence"
           ]
         }
@@ -215,7 +215,7 @@
         "brief": "$state.brief"
       },
       "outputs": {
-        "result": "$result"
+        "classification": "$result"
       },
       "config": {
         "handler": "brief.validate"
@@ -224,29 +224,31 @@
     },
     {
       "id": "request_clarification",
-      "kind": "tool",
+      "kind": "approval",
       "inputs": {
-        "request": "$state.input",
-        "brief": "$state.brief"
+        "brief": "$state.brief",
+        "classification": "$state.classification"
       },
       "outputs": {
-        "result": "$result"
+        "approval": "$result"
       },
-      "config": {},
-      "tool_ref": "workflow.send_clarification"
+      "config": {
+        "message_template": "В заявке не хватает обязательных данных. Предоставьте недостающие поля, источники, ограничения, формулировки, запреты, референсы или файлы."
+      },
+      "tool_ref": null
     },
     {
-      "id": "classify_and_route",
+      "id": "confirm_routing",
       "kind": "function",
       "inputs": {
         "brief": "$state.brief",
-        "validation": "$state.result"
+        "approval": "$state.approval"
       },
       "outputs": {
         "classification": "$result"
       },
       "config": {
-        "handler": "routing.classify_and_route"
+        "handler": "routing.confirm_type_and_urgency"
       },
       "tool_ref": null
     },
@@ -269,133 +271,208 @@
       "kind": "approval",
       "inputs": {
         "classification": "$state.classification",
-        "conflict": "$state.result"
+        "result": "$state.result"
       },
       "outputs": {
         "approval": "$result"
       },
       "config": {
-        "message_template": "Обнаружен конфликт приоритетов. Подтвердите приоритет и перераспределение ресурсов."
+        "message_template": "Обнаружен конфликт приоритетов или ресурсов. Подтвердите приоритет и перераспределение ресурсов."
       },
       "tool_ref": null
     },
     {
-      "id": "assign_executor",
-      "kind": "function",
-      "inputs": {
-        "classification": "$state.classification",
-        "approval": "$state.approval"
-      },
-      "outputs": {
-        "result": "$result"
-      },
-      "config": {
-        "handler": "routing.assign_executor"
-      },
-      "tool_ref": null
-    },
-    {
-      "id": "generate_draft",
+      "id": "assign_rt",
       "kind": "tool",
       "inputs": {
-        "brief": "$state.brief",
-        "classification": "$state.classification",
-        "assignment": "$state.result"
-      },
-      "outputs": {
-        "result": "$result"
-      },
-      "config": {},
-      "tool_ref": "ai.generate_draft"
-    },
-    {
-      "id": "finalize_asset",
-      "kind": "tool",
-      "inputs": {
-        "draft": "$state.result",
         "classification": "$state.classification"
       },
       "outputs": {
         "result": "$result"
       },
       "config": {},
-      "tool_ref": "design.finalize_asset"
+      "tool_ref": "workflow.assign_executor"
+    },
+    {
+      "id": "assign_collage",
+      "kind": "tool",
+      "inputs": {
+        "classification": "$state.classification"
+      },
+      "outputs": {
+        "result": "$result"
+      },
+      "config": {},
+      "tool_ref": "workflow.assign_executor"
+    },
+    {
+      "id": "assign_motion",
+      "kind": "tool",
+      "inputs": {
+        "classification": "$state.classification"
+      },
+      "outputs": {
+        "result": "$result"
+      },
+      "config": {},
+      "tool_ref": "workflow.assign_executor"
+    },
+    {
+      "id": "generate_rt_draft",
+      "kind": "tool",
+      "inputs": {
+        "brief": "$state.brief",
+        "classification": "$state.classification"
+      },
+      "outputs": {
+        "result": "$result"
+      },
+      "config": {},
+      "tool_ref": "vizrt.create_draft"
+    },
+    {
+      "id": "generate_collage_draft",
+      "kind": "tool",
+      "inputs": {
+        "brief": "$state.brief",
+        "classification": "$state.classification"
+      },
+      "outputs": {
+        "result": "$result"
+      },
+      "config": {},
+      "tool_ref": "drop.publish_draft"
+    },
+    {
+      "id": "generate_motion_draft",
+      "kind": "tool",
+      "inputs": {
+        "brief": "$state.brief",
+        "classification": "$state.classification"
+      },
+      "outputs": {
+        "result": "$result"
+      },
+      "config": {},
+      "tool_ref": "drop.publish_draft"
+    },
+    {
+      "id": "finalize_rt",
+      "kind": "tool",
+      "inputs": {
+        "result": "$state.result",
+        "review_comments": "$state.review_comments"
+      },
+      "outputs": {
+        "result": "$result"
+      },
+      "config": {},
+      "tool_ref": "vizrt.publish_final"
+    },
+    {
+      "id": "finalize_collage",
+      "kind": "tool",
+      "inputs": {
+        "result": "$state.result",
+        "review_comments": "$state.review_comments"
+      },
+      "outputs": {
+        "result": "$result"
+      },
+      "config": {},
+      "tool_ref": "drop.publish_final"
+    },
+    {
+      "id": "finalize_motion",
+      "kind": "tool",
+      "inputs": {
+        "result": "$state.result",
+        "review_comments": "$state.review_comments"
+      },
+      "outputs": {
+        "result": "$result"
+      },
+      "config": {},
+      "tool_ref": "drop.publish_final"
     },
     {
       "id": "editorial_review",
       "kind": "approval",
       "inputs": {
-        "asset": "$state.result",
-        "classification": "$state.classification"
+        "classification": "$state.classification",
+        "result": "$state.result",
+        "iteration_count": "$state.iteration_count"
       },
       "outputs": {
-        "approval": "$result",
-        "approval_status": "$result.status",
-        "review_comments": "$result.comments"
+        "approval": "$result"
       },
       "config": {
-        "message_template": "Проверьте графику и укажите: OK или правки. Перед эфиром/публикацией требуется явное человеческое подтверждение."
+        "message_template": "Проверьте результат и верните один из статусов: approved, changes_requested, rejected. Если нужны правки, укажите комментарии."
       },
       "tool_ref": null
     },
     {
-      "id": "apply_revisions",
-      "kind": "tool",
+      "id": "apply_rework",
+      "kind": "function",
       "inputs": {
-        "asset": "$state.result",
-        "comments": "$state.review_comments",
+        "approval": "$state.approval",
+        "iteration_count": "$state.iteration_count",
         "classification": "$state.classification"
       },
       "outputs": {
-        "result": "$result"
+        "review_comments": "$result"
       },
-      "config": {},
-      "tool_ref": "design.apply_revisions"
+      "config": {
+        "handler": "review.prepare_rework"
+      },
+      "tool_ref": null
     },
     {
-      "id": "deliver_rt_to_air",
-      "kind": "tool",
+      "id": "route_delivery",
+      "kind": "function",
       "inputs": {
-        "asset": "$state.result",
-        "classification": "$state.classification"
+        "classification": "$state.classification",
+        "approval": "$state.approval",
+        "result": "$state.result"
       },
       "outputs": {
         "result": "$result"
       },
-      "config": {},
-      "tool_ref": "broadcast.deploy_rt"
+      "config": {
+        "handler": "delivery.route_final_channel"
+      },
+      "tool_ref": null
     },
     {
-      "id": "publish_non_rt_asset",
+      "id": "deploy_rt_on_air",
       "kind": "tool",
       "inputs": {
-        "asset": "$state.result",
-        "classification": "$state.classification"
+        "result": "$state.result"
       },
       "outputs": {
         "result": "$result"
       },
       "config": {},
-      "tool_ref": "storage.publish_asset"
+      "tool_ref": "cosmedia.deploy_asset"
     },
     {
       "id": "handoff_to_editing",
       "kind": "tool",
       "inputs": {
-        "published_asset": "$state.result"
+        "result": "$state.result"
       },
       "outputs": {
         "result": "$result"
       },
       "config": {},
-      "tool_ref": "editing.send_links"
+      "tool_ref": "nle.send_links"
     },
     {
       "id": "close_request",
       "kind": "tool",
       "inputs": {
-        "request": "$state.input",
-        "delivery_result": "$state.result",
+        "classification": "$state.classification",
+        "result": "$state.result",
         "approval": "$state.approval"
       },
       "outputs": {
@@ -430,26 +507,53 @@
           "when": {
             "==": [
               {
-                "var": "result.is_complete"
+                "var": "classification.is_complete"
               },
-              false
+              true
             ]
           },
-          "to": "request_clarification"
+          "to": "confirm_routing"
         },
         {
           "when": true,
-          "to": "classify_and_route"
+          "to": "request_clarification"
         }
       ]
     },
     {
       "from": "request_clarification",
-      "to": "build_ai_brief",
-      "type": "direct"
+      "type": "conditional",
+      "conditions": [
+        {
+          "when": {
+            "==": [
+              {
+                "var": "approval.status"
+              },
+              "provided"
+            ]
+          },
+          "to": "build_ai_brief"
+        },
+        {
+          "when": {
+            "==": [
+              {
+                "var": "approval.status"
+              },
+              "rejected"
+            ]
+          },
+          "to": "END"
+        },
+        {
+          "when": true,
+          "to": "END"
+        }
+      ]
     },
     {
-      "from": "classify_and_route",
+      "from": "confirm_routing",
       "to": "check_priority_conflict",
       "type": "direct"
     },
@@ -461,7 +565,7 @@
           "when": {
             "==": [
               {
-                "var": "result.has_conflict"
+                "var": "result.conflict"
               },
               true
             ]
@@ -470,27 +574,111 @@
         },
         {
           "when": true,
-          "to": "assign_executor"
+          "to": "assign_rt"
         }
       ]
     },
     {
       "from": "resolve_priority_conflict",
-      "to": "assign_executor",
+      "type": "conditional",
+      "conditions": [
+        {
+          "when": {
+            "==": [
+              {
+                "var": "approval.status"
+              },
+              "approved"
+            ]
+          },
+          "to": "assign_rt"
+        },
+        {
+          "when": {
+            "==": [
+              {
+                "var": "approval.status"
+              },
+              "rejected"
+            ]
+          },
+          "to": "END"
+        },
+        {
+          "when": true,
+          "to": "END"
+        }
+      ]
+    },
+    {
+      "from": "assign_rt",
+      "type": "conditional",
+      "conditions": [
+        {
+          "when": {
+            "==": [
+              {
+                "var": "classification.route"
+              },
+              "rt"
+            ]
+          },
+          "to": "generate_rt_draft"
+        },
+        {
+          "when": {
+            "==": [
+              {
+                "var": "classification.route"
+              },
+              "collage"
+            ]
+          },
+          "to": "assign_collage"
+        },
+        {
+          "when": true,
+          "to": "assign_motion"
+        }
+      ]
+    },
+    {
+      "from": "assign_collage",
+      "to": "generate_collage_draft",
       "type": "direct"
     },
     {
-      "from": "assign_executor",
-      "to": "generate_draft",
+      "from": "assign_motion",
+      "to": "generate_motion_draft",
       "type": "direct"
     },
     {
-      "from": "generate_draft",
-      "to": "finalize_asset",
+      "from": "generate_rt_draft",
+      "to": "finalize_rt",
       "type": "direct"
     },
     {
-      "from": "finalize_asset",
+      "from": "generate_collage_draft",
+      "to": "finalize_collage",
+      "type": "direct"
+    },
+    {
+      "from": "generate_motion_draft",
+      "to": "finalize_motion",
+      "type": "direct"
+    },
+    {
+      "from": "finalize_rt",
+      "to": "editorial_review",
+      "type": "direct"
+    },
+    {
+      "from": "finalize_collage",
+      "to": "editorial_review",
+      "type": "direct"
+    },
+    {
+      "from": "finalize_motion",
       "to": "editorial_review",
       "type": "direct"
     },
@@ -502,23 +690,34 @@
           "when": {
             "==": [
               {
-                "var": "approval_status"
+                "var": "approval.status"
               },
-              "changes_requested"
+              "approved"
             ]
           },
-          "to": "apply_revisions"
+          "to": "route_delivery"
         },
         {
           "when": {
             "==": [
               {
-                "var": "approval_status"
+                "var": "approval.status"
               },
-              "approved"
+              "changes_requested"
             ]
           },
-          "to": "deliver_rt_to_air"
+          "to": "apply_rework"
+        },
+        {
+          "when": {
+            "==": [
+              {
+                "var": "approval.status"
+              },
+              "rejected"
+            ]
+          },
+          "to": "END"
         },
         {
           "when": true,
@@ -527,34 +726,83 @@
       ]
     },
     {
-      "from": "apply_revisions",
-      "to": "editorial_review",
-      "type": "direct"
-    },
-    {
-      "from": "deliver_rt_to_air",
+      "from": "apply_rework",
       "type": "conditional",
       "conditions": [
         {
           "when": {
             "==": [
               {
-                "var": "classification.type"
+                "var": "classification.route"
               },
               "rt"
             ]
           },
-          "to": "close_request"
+          "to": "finalize_rt"
+        },
+        {
+          "when": {
+            "==": [
+              {
+                "var": "classification.route"
+              },
+              "collage"
+            ]
+          },
+          "to": "finalize_collage"
+        },
+        {
+          "when": {
+            "==": [
+              {
+                "var": "classification.route"
+              },
+              "motion"
+            ]
+          },
+          "to": "finalize_motion"
         },
         {
           "when": true,
-          "to": "publish_non_rt_asset"
+          "to": "END"
         }
       ]
     },
     {
-      "from": "publish_non_rt_asset",
-      "to": "handoff_to_editing",
+      "from": "route_delivery",
+      "type": "conditional",
+      "conditions": [
+        {
+          "when": {
+            "==": [
+              {
+                "var": "result.delivery_channel"
+              },
+              "on_air"
+            ]
+          },
+          "to": "deploy_rt_on_air"
+        },
+        {
+          "when": {
+            "==": [
+              {
+                "var": "result.delivery_channel"
+              },
+              "editing"
+            ]
+          },
+          "to": "handoff_to_editing"
+        },
+        {
+          "when": true,
+          "to": "END"
+        }
+      ]
+    },
+    {
+      "from": "deploy_rt_on_air",
+      "to": "close_request",
       "type": "direct"
     },
     {
