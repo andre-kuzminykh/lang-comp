@@ -785,6 +785,141 @@ def _auto_registry_from_spec(spec: Dict[str, Any]) -> tuple:
     return registry, llm_runner_name
 
 
+def _live_registry_from_spec(spec: Dict[str, Any]) -> tuple:
+    """
+    Build a registry with real OpenAI LLM runner, interactive approval,
+    and stub tools for a given spec. Requires OPENAI_API_KEY env var.
+    """
+    import os
+
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        raise RuntimeError(
+            "OPENAI_API_KEY environment variable is required for --live mode.\n"
+            "Set it with: export OPENAI_API_KEY='sk-...'"
+        )
+
+    try:
+        from openai import OpenAI
+    except ImportError:
+        raise RuntimeError("openai package is required for --live mode.\nInstall with: pip install openai")
+
+    client = OpenAI(api_key=api_key)
+    registry = LocalRegistry()
+
+    # ── Real OpenAI LLM runner ──
+    def openai_llm_runner(config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
+        model = config.get("model", "gpt-4.1")
+        system_prompt = config.get("system_prompt", "You are a helpful assistant. Always respond with valid JSON.")
+        prompt_template = config.get("prompt_template", "{{input}}")
+        output_schema = config.get("output_schema")
+
+        # Render template
+        prompt = prompt_template
+        for key, value in inputs.items():
+            prompt = prompt.replace("{{" + key + "}}", json.dumps(value, ensure_ascii=False) if isinstance(value, (dict, list)) else str(value))
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": prompt},
+        ]
+
+        # Use structured output if schema provided
+        if output_schema and output_schema.get("properties"):
+            response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                response_format={"type": "json_object"},
+            )
+        else:
+            response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                response_format={"type": "json_object"},
+            )
+
+        content = response.choices[0].message.content
+        try:
+            return json.loads(content)
+        except json.JSONDecodeError:
+            return {"raw_response": content}
+
+    # ── Interactive terminal approval ──
+    def interactive_approval_handler(node_spec: Dict[str, Any], state: Dict[str, Any]) -> Dict[str, Any]:
+        message = node_spec["config"].get("message_template", "Approval required")
+        node_id = node_spec["id"]
+        inputs_map = node_spec.get("inputs", {})
+        resolved = resolve_inputs(inputs_map, state)
+
+        print(f"\n{'='*60}")
+        print(f"  APPROVAL REQUIRED: {node_id}")
+        print(f"{'='*60}")
+        print(f"  {message}\n")
+        print(f"  Context:")
+        for k, v in resolved.items():
+            print(f"    {k}: {json.dumps(v, ensure_ascii=False, indent=6)}")
+        print()
+
+        while True:
+            answer = input("  Your decision [approve/reject/changes]: ").strip().lower()
+            if answer in ("approve", "approved", "ok", "yes", "y", "да"):
+                status = "approved"
+                break
+            elif answer in ("reject", "rejected", "no", "n", "нет"):
+                status = "rejected"
+                break
+            elif answer in ("changes", "revisions", "правки", "change"):
+                status = "changes_requested"
+                break
+            else:
+                print("  Please enter: approve, reject, or changes")
+
+        comments_input = input("  Comments (optional, press Enter to skip): ").strip()
+        comments = [comments_input] if comments_input else []
+
+        print(f"  → Decision: {status}")
+        print(f"{'='*60}\n")
+        return {"status": status, "comments": comments}
+
+    # ── Stub tool runner ──
+    def stub_tool(_tool_spec: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
+        tool_id = _tool_spec.get("id", "unknown")
+        print(f"  [tool] {tool_id} called with {list(inputs.keys())}")
+        return {"ok": True, "tool": tool_id, "echo": inputs, "id": "live_001"}
+
+    # ── Stub function handler ──
+    def stub_function(inputs: Dict[str, Any]) -> Dict[str, Any]:
+        return {k: v for k, v in inputs.items()}
+
+    # Register LLM runner
+    llm_runner_name = "openai_live"
+    registry.register_llm_runner(llm_runner_name, openai_llm_runner)
+
+    # Scan spec and register handlers
+    for node in spec.get("nodes", []):
+        kind = node["kind"]
+        if kind == "function":
+            handler = node["config"]["handler"]
+            if handler not in registry.functions:
+                registry.register_function(handler, stub_function)
+        elif kind == "llm":
+            runner = node["config"].get("runner")
+            if runner and runner not in registry.llm_runners:
+                registry.register_llm_runner(runner, openai_llm_runner)
+        elif kind == "tool":
+            tool_ref = node.get("tool_ref")
+            if tool_ref and tool_ref not in registry.tools:
+                registry.register_tool(tool_ref, stub_tool)
+        elif kind == "retrieval":
+            runner = node["config"].get("runner")
+            if runner and runner not in registry.retrievals:
+                def _stub_retrieval(config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
+                    return {"documents": [{"source": "stub", "score": 0.9, "text": "stub doc"}]}
+                registry.register_retrieval(runner, _stub_retrieval)
+
+    return registry, llm_runner_name, interactive_approval_handler
+
+
 def _make_default_registry() -> LocalRegistry:
     registry = LocalRegistry()
     registry.register_function("langgraph_spec_compiler.sample_normalize_input", sample_normalize_input)
@@ -813,6 +948,9 @@ def main() -> None:
     parser.add_argument("--auto", action="store_true",
                         help="Auto-generate stub handlers for all nodes and run the graph. "
                              "Works with any spec JSON without manual handler registration.")
+    parser.add_argument("--live", action="store_true",
+                        help="Live mode: real OpenAI API for LLM nodes, interactive terminal "
+                             "approval for human-in-the-loop nodes. Requires OPENAI_API_KEY.")
     args = parser.parse_args()
 
     if args.write_example:
@@ -825,8 +963,12 @@ def main() -> None:
         parser.error("--spec is required unless --write-example is used")
 
     spec = load_spec(args.spec)
+    interactive_approval = None
 
-    if args.auto:
+    if args.live:
+        registry, default_llm, interactive_approval = _live_registry_from_spec(spec)
+        compiler = GraphSpecCompiler(registry, default_llm_runner=default_llm)
+    elif args.auto:
         registry, default_llm = _auto_registry_from_spec(spec)
         compiler = GraphSpecCompiler(registry, default_llm_runner=default_llm)
     else:
@@ -840,26 +982,48 @@ def main() -> None:
     if args.print_mermaid:
         _print_mermaid(graph)
 
-    if args.invoke or args.auto:
-        payload = json.loads(args.input_json) if args.input_json else {"input": {"text": "test"}}
+    if args.invoke or args.auto or args.live:
+        if args.live and not args.input_json:
+            # Interactive input in live mode
+            print("\nEnter your request (JSON or plain text):")
+            user_input = input("> ").strip()
+            try:
+                payload = json.loads(user_input)
+            except json.JSONDecodeError:
+                payload = {"input": {"text": user_input}}
+        else:
+            payload = json.loads(args.input_json) if args.input_json else {"input": {"text": "test"}}
+
         config = {"configurable": {"thread_id": "cli-thread-1"}}
 
         if interrupt is not None:
-            # Handle interrupt loops (approval nodes) automatically in --auto mode
             from langgraph.types import Command
             result = graph.invoke(payload, config=config)
-            if args.auto:
-                for _ in range(10):
-                    state = graph.get_state(config)
-                    if not state.tasks or not any(t.interrupts for t in state.tasks):
-                        break
-                    for task in state.tasks:
-                        if task.interrupts:
-                            print(f"[auto-approve] {task.name}: {task.interrupts[0].value.get('message', '')}")
+
+            # Handle interrupt loops (approval nodes)
+            for _ in range(10):
+                state = graph.get_state(config)
+                if not state.tasks or not any(t.interrupts for t in state.tasks):
+                    break
+                for task in state.tasks:
+                    if task.interrupts:
+                        interrupt_val = task.interrupts[0].value
+                        if args.live and interactive_approval:
+                            # Find matching node spec for interactive approval
+                            node_spec = next((n for n in spec["nodes"] if n["id"] == task.name), None)
+                            if node_spec:
+                                current_state = graph.get_state(config).values
+                                approval_result = interactive_approval(node_spec, current_state)
+                            else:
+                                approval_result = {"status": "approved", "comments": []}
+                            result = graph.invoke(Command(resume=approval_result), config=config)
+                        elif args.auto:
+                            print(f"[auto-approve] {task.name}: {interrupt_val.get('message', '')}")
                             result = graph.invoke(Command(resume={"status": "approved", "comments": []}), config=config)
         else:
             result = graph.invoke(payload, config=config)
 
+        print("\n── Result ──")
         print(json.dumps(result, ensure_ascii=False, indent=2))
 
 
