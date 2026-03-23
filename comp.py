@@ -536,31 +536,40 @@ class GraphSpecCompiler:
         return not_implemented
 
     def _add_edges(self, builder: Any, edges: List[Dict[str, Any]]) -> None:
+        # Merge conditional edges from the same source and deduplicate direct edges
+        direct_seen: set = set()
+        conditional_by_src: Dict[str, List[Dict[str, Any]]] = {}
+
         for edge in edges:
             if edge["type"] == "direct":
                 src = START if edge["from"] == "START" else edge["from"]
                 dst = END if edge["to"] == "END" else edge["to"]
-                builder.add_edge(src, dst)
+                key = (src, dst)
+                if key not in direct_seen:
+                    builder.add_edge(src, dst)
+                    direct_seen.add(key)
 
             elif edge["type"] == "conditional":
                 src = START if edge["from"] == "START" else edge["from"]
-                conditions = edge["conditions"]
-
-                route_map: Dict[str, Any] = {}
-                for idx, cond in enumerate(conditions):
-                    route_name = f"route_{idx}"
-                    route_map[route_name] = END if cond["to"] == "END" else cond["to"]
-
-                def router(state: Dict[str, Any], _conditions=conditions):
-                    for idx, cond in enumerate(_conditions):
-                        if eval_logic(cond["when"], state):
-                            return f"route_{idx}"
-                    raise GraphSpecError(f"No conditional branch matched for edge from {edge['from']}")
-
-                builder.add_conditional_edges(src, router, route_map)
+                conditional_by_src.setdefault(src, []).extend(edge["conditions"])
 
             else:
                 raise GraphSpecError(f"Unsupported edge type: {edge['type']}")
+
+        # Add merged conditional edges
+        for src, conditions in conditional_by_src.items():
+            route_map: Dict[str, Any] = {}
+            for idx, cond in enumerate(conditions):
+                route_name = f"route_{idx}"
+                route_map[route_name] = END if cond["to"] == "END" else cond["to"]
+
+            def router(state: Dict[str, Any], _conditions=conditions):
+                for idx, cond in enumerate(_conditions):
+                    if eval_logic(cond["when"], state):
+                        return f"route_{idx}"
+                raise GraphSpecError(f"No conditional branch matched for edge from {src}")
+
+            builder.add_conditional_edges(src, router, route_map)
 
 
 # ---------------------------
@@ -1215,10 +1224,24 @@ def main() -> None:
 
         if interrupt is not None:
             from langgraph.types import Command
+
+            # Pre-build hint-aware approval responses for auto mode
+            approval_map: Dict[str, Dict[str, Any]] = {}
+            if args.auto:
+                node_index = {n["id"]: n for n in spec.get("nodes", [])}
+                hints = _extract_route_hints(spec, overrides=route_overrides if args.auto else None)
+                for node in spec.get("nodes", []):
+                    if node["kind"] == "approval":
+                        node_hints = _build_node_output_hints(node, hints)
+                        base = {"status": "approved", "comments": []}
+                        if node_hints:
+                            base.update(node_hints)
+                        approval_map[node["id"]] = base
+
             result = graph.invoke(payload, config=config)
 
             # Handle interrupt loops (approval nodes)
-            for _ in range(10):
+            for _ in range(20):
                 state = graph.get_state(config)
                 if not state.tasks or not any(t.interrupts for t in state.tasks):
                     break
@@ -1235,8 +1258,9 @@ def main() -> None:
                                 approval_result = {"status": "approved", "comments": []}
                             result = graph.invoke(Command(resume=approval_result), config=config)
                         elif args.auto:
+                            approval_result = approval_map.get(task.name, {"status": "approved", "comments": []})
                             print(f"[auto-approve] {task.name}: {interrupt_val.get('message', '')}")
-                            result = graph.invoke(Command(resume={"status": "approved", "comments": []}), config=config)
+                            result = graph.invoke(Command(resume=approval_result), config=config)
         else:
             result = graph.invoke(payload, config=config)
 
