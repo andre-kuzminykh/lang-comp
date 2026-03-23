@@ -16,48 +16,85 @@ from comp import GraphSpecCompiler, LocalRegistry, load_spec
 # ── LLM runner (stub) ──────────────────────────────────────────
 
 def stub_llm_runner(config, inputs):
-    """Simulates LLM response based on node config."""
-    request = inputs.get("request", {})
-    text = request.get("text", "") if isinstance(request, dict) else str(request)
+    """Simulates LLM response based on output_schema."""
+    schema = config.get("output_schema", {})
+    props = schema.get("properties", {})
+    result = {}
+    for key, prop in props.items():
+        t = prop.get("type", "string")
+        # Handle union types like ["string", "null"]
+        if isinstance(t, list):
+            t = t[0]
+        if t == "object":
+            result[key] = {"stub": True}
+        elif t == "array":
+            result[key] = []
+        elif t == "number":
+            result[key] = 0.92
+        elif t == "integer":
+            result[key] = 0
+        elif t == "boolean":
+            result[key] = True
+        else:
+            result[key] = f"stub_{key}"
+    return result or {"stub": True}
+
+
+# ── Retrieval runner (stub) ───────────────────────────────────
+
+def stub_retrieval_runner(config, inputs):
+    """Simulates design context retrieval."""
     return {
-        "normalized_brief": {"text": text, "source": "ai_stub"},
-        "missing_fields": [],
-        "recommended_type": "collage",
-        "recommended_urgency": "normal",
-        "confidence": 0.92,
+        "documents": [
+            {
+                "source": config.get("source", "design_guidelines"),
+                "score": 0.9,
+                "text": "Stub design guideline: brand colors, 1920x1080, safe zone margins.",
+            }
+        ]
     }
 
 
 # ── Function handlers ──────────────────────────────────────────
 
-def brief_validate(inputs):
+def workflow_validate_brief(inputs):
     """Validates brief completeness."""
-    brief = inputs.get("brief", {})
-    missing = brief.get("missing_fields", []) if brief else []
-    return {"is_complete": len(missing) == 0, "missing": missing}
+    return {"status": "complete", "missing_fields": [], "blocking_reason": None}
 
 
-def routing_classify_and_route(inputs):
-    """Classifies request type and urgency."""
-    brief = inputs.get("brief", {}) or {}
+def workflow_mark_invalid_request(inputs):
+    """Marks request as invalid."""
+    return {"status": "invalid", "reason": "Request could not be validated"}
+
+
+def workflow_check_priority_conflict(inputs):
+    """Checks for priority conflicts."""
+    return {"conflict": False}
+
+
+def workflow_quality_gate(inputs):
+    """Pre-review quality gate — passes through."""
+    return inputs.get("result", {}) or {}
+
+
+def workflow_evaluate_review_outcome(inputs):
+    """Captures editorial review outcome."""
+    approval = inputs.get("approval", {}) or {}
+    iteration_count = inputs.get("iteration_count") or 0
+    status = approval.get("status", "approved")
     return {
-        "type": brief.get("recommended_type", "collage"),
-        "urgency": brief.get("recommended_urgency", "normal"),
-        "assigned_team": "design",
+        "status": status,
+        "comments": approval.get("comments", ""),
+        "iteration_count": iteration_count + 1,
+        "max_iterations_reached": iteration_count + 1 >= 5,
     }
 
 
-def priority_check_conflict(inputs):
-    """Checks for priority conflicts (stub: no conflicts)."""
-    return {"has_conflict": False}
-
-
-def routing_assign_executor(inputs):
-    """Assigns executor based on classification."""
-    classification = inputs.get("classification", {}) or {}
+def workflow_close_request(inputs):
+    """Closes the request."""
     return {
-        "executor": "designer_01",
-        "type": classification.get("type", "collage"),
+        "closed": True,
+        "final_status": inputs.get("approval_status", {}).get("status", "completed"),
     }
 
 
@@ -77,23 +114,31 @@ def make_registry():
     # LLM runner
     registry.register_llm_runner("stub_llm", stub_llm_runner)
 
+    # Retrieval runner
+    registry.register_retrieval("stub_retrieval", stub_retrieval_runner)
+
     # Function handlers
-    registry.register_function("brief.validate", brief_validate)
-    registry.register_function("routing.classify_and_route", routing_classify_and_route)
-    registry.register_function("priority.check_conflict", priority_check_conflict)
-    registry.register_function("routing.assign_executor", routing_assign_executor)
+    registry.register_function("workflow.validate_brief", workflow_validate_brief)
+    registry.register_function("workflow.mark_invalid_request", workflow_mark_invalid_request)
+    registry.register_function("workflow.check_priority_conflict", workflow_check_priority_conflict)
+    registry.register_function("workflow.quality_gate", workflow_quality_gate)
+    registry.register_function("workflow.evaluate_review_outcome", workflow_evaluate_review_outcome)
+    registry.register_function("workflow.close_request", workflow_close_request)
 
     # Tool runners (all unresolved tools use the same stub)
     for tool_id in [
         "workflow.create_request",
         "workflow.send_clarification",
-        "ai.generate_draft",
-        "design.finalize_asset",
-        "design.apply_revisions",
-        "broadcast.deploy_rt",
-        "storage.publish_asset",
-        "editing.send_links",
-        "workflow.close_request",
+        "workflow.assign_rt",
+        "workflow.assign_collage",
+        "workflow.assign_motion",
+        "vizrt.create_rt_draft",
+        "storage.create_collage_draft",
+        "storage.create_motion_draft",
+        "cosmedia.deploy_rt",
+        "storage.publish_collage_final",
+        "storage.publish_motion_final",
+        "workflow.deliver_to_nle",
     ]:
         registry.register_tool(tool_id, stub_tool)
 
@@ -102,9 +147,21 @@ def make_registry():
 
 # ── Auto-approve interrupts ────────────────────────────────────
 
+DEFAULT_ROUTE = "collage"
+
 AUTO_APPROVALS = {
-    "resolve_priority_conflict": {"status": "approved", "priority": "confirmed"},
-    "editorial_review": {"status": "approved", "comments": []},
+    "supervisor_triage": {"route": DEFAULT_ROUTE, "urgency": "normal", "deadline": "2h"},
+    "wait_for_clarification": {"text": "clarified data", "source": "stub"},
+    "hd_priority_resolution": {"route": DEFAULT_ROUTE, "urgency": "confirmed", "status": "approved"},
+    "rt_finalize": {"status": "approved", "comments": []},
+    "collage_finalize": {"status": "approved", "comments": []},
+    "motion_finalize": {"status": "approved", "comments": []},
+    "rt_editor_review": {"status": "approved", "comments": []},
+    "collage_editor_review": {"status": "approved", "comments": []},
+    "motion_editor_review": {"status": "approved", "comments": []},
+    "rt_rework": {"status": "approved", "asset": {"reworked": True}},
+    "collage_rework": {"status": "approved", "asset": {"reworked": True}},
+    "motion_rework": {"status": "approved", "asset": {"reworked": True}},
 }
 
 
@@ -113,23 +170,33 @@ AUTO_APPROVALS = {
 def main():
     spec_path = sys.argv[1] if len(sys.argv) > 1 else "graph.json"
     input_text = sys.argv[2] if len(sys.argv) > 2 else "Сделать плашку для новостного выпуска"
+    route = sys.argv[3] if len(sys.argv) > 3 else DEFAULT_ROUTE
+
+    # Update route-dependent approvals
+    AUTO_APPROVALS["supervisor_triage"]["route"] = route
+    AUTO_APPROVALS["hd_priority_resolution"]["route"] = route
 
     spec = load_spec(spec_path)
     registry = make_registry()
-    compiler = GraphSpecCompiler(registry, default_llm_runner="stub_llm")
+    compiler = GraphSpecCompiler(
+        registry,
+        default_llm_runner="stub_llm",
+        default_retrieval_runner="stub_retrieval",
+    )
     graph = compiler.compile_spec(spec)
 
     payload = {"input": {"text": input_text}}
     config = {"configurable": {"thread_id": "local-1"}}
 
     print(f"Running graph: {spec['graph_id']}")
-    print(f"Input: {input_text}\n")
+    print(f"Input: {input_text}")
+    print(f"Route: {route}\n")
 
     # First invocation
     result = graph.invoke(payload, config=config)
 
     # Handle interrupts (approval nodes) automatically
-    max_iterations = 10
+    max_iterations = 20
     iteration = 0
     while iteration < max_iterations:
         state = graph.get_state(config)

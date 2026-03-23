@@ -387,9 +387,11 @@ class GraphSpecCompiler:
         self,
         registry: Optional[LocalRegistry] = None,
         default_llm_runner: Optional[str] = None,
+        default_retrieval_runner: Optional[str] = None,
     ) -> None:
         self.registry = registry or LocalRegistry()
         self.default_llm_runner = default_llm_runner
+        self.default_retrieval_runner = default_retrieval_runner
 
     def compile_spec(self, spec: Dict[str, Any], *, checkpointer: Any = None):
         if _IMPORT_ERROR is not None:
@@ -473,9 +475,11 @@ class GraphSpecCompiler:
             return node
 
         if kind == "retrieval":
-            retrieval_name = node_spec["config"].get("runner")
+            retrieval_name = node_spec["config"].get("runner") or self.default_retrieval_runner
             if not retrieval_name:
-                raise RegistryError(f"Retrieval node {node_spec['id']} must define config.runner")
+                raise RegistryError(
+                    f"Retrieval node {node_spec['id']} has no config.runner and no default_retrieval_runner was provided"
+                )
             retrieval_runner = self.registry.get_retrieval(retrieval_name)
 
             def node(state: Dict[str, Any]) -> Dict[str, Any]:
@@ -532,31 +536,40 @@ class GraphSpecCompiler:
         return not_implemented
 
     def _add_edges(self, builder: Any, edges: List[Dict[str, Any]]) -> None:
+        # Merge conditional edges from the same source and deduplicate direct edges
+        direct_seen: set = set()
+        conditional_by_src: Dict[str, List[Dict[str, Any]]] = {}
+
         for edge in edges:
             if edge["type"] == "direct":
                 src = START if edge["from"] == "START" else edge["from"]
                 dst = END if edge["to"] == "END" else edge["to"]
-                builder.add_edge(src, dst)
+                key = (src, dst)
+                if key not in direct_seen:
+                    builder.add_edge(src, dst)
+                    direct_seen.add(key)
 
             elif edge["type"] == "conditional":
                 src = START if edge["from"] == "START" else edge["from"]
-                conditions = edge["conditions"]
-
-                route_map: Dict[str, Any] = {}
-                for idx, cond in enumerate(conditions):
-                    route_name = f"route_{idx}"
-                    route_map[route_name] = END if cond["to"] == "END" else cond["to"]
-
-                def router(state: Dict[str, Any], _conditions=conditions):
-                    for idx, cond in enumerate(_conditions):
-                        if eval_logic(cond["when"], state):
-                            return f"route_{idx}"
-                    raise GraphSpecError(f"No conditional branch matched for edge from {edge['from']}")
-
-                builder.add_conditional_edges(src, router, route_map)
+                conditional_by_src.setdefault(src, []).extend(edge["conditions"])
 
             else:
                 raise GraphSpecError(f"Unsupported edge type: {edge['type']}")
+
+        # Add merged conditional edges
+        for src, conditions in conditional_by_src.items():
+            route_map: Dict[str, Any] = {}
+            for idx, cond in enumerate(conditions):
+                route_name = f"route_{idx}"
+                route_map[route_name] = END if cond["to"] == "END" else cond["to"]
+
+            def router(state: Dict[str, Any], _conditions=conditions):
+                for idx, cond in enumerate(_conditions):
+                    if eval_logic(cond["when"], state):
+                        return f"route_{idx}"
+                raise GraphSpecError(f"No conditional branch matched for edge from {src}")
+
+            builder.add_conditional_edges(src, router, route_map)
 
 
 # ---------------------------
@@ -724,15 +737,203 @@ EXAMPLE_SPEC = {
 }
 
 
-def _auto_registry_from_spec(spec: Dict[str, Any]) -> tuple:
+def _collect_var_hints(expr: Any, hints: Dict[str, Any]) -> None:
+    """Recursively extract {var_path: expected_value} from a JSONLogic condition."""
+    if not isinstance(expr, dict):
+        return
+    if "==" in expr:
+        a, b = expr["=="]
+        if isinstance(a, dict) and "var" in a and not isinstance(b, dict):
+            path = a["var"]
+            if path not in hints:
+                hints[path] = b
+        elif isinstance(b, dict) and "var" in b and not isinstance(a, dict):
+            path = b["var"]
+            if path not in hints:
+                hints[path] = a
+    for op in ("and", "or"):
+        if op in expr:
+            for sub in expr[op]:
+                _collect_var_hints(sub, hints)
+
+
+def _extract_route_hints(spec: Dict[str, Any], overrides: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """
-    Scan a graph spec and auto-register stub handlers for every node.
-    Returns (registry, default_llm_runner_name).
+    Scan conditional edges in the spec, pick the first non-fallback branch
+    of each conditional, and extract {state_path: expected_value}.
+
+    If overrides are provided, matching hints are replaced. This lets the
+    caller force a specific route (e.g., {"classification.route": "collage"}).
+
+    Example result: {"brief_validation.status": "complete", "classification.route": "rt"}
+    """
+    hints: Dict[str, Any] = {}
+    for edge in spec.get("edges", []):
+        if edge.get("type") != "conditional":
+            continue
+        # If we have overrides, try to find the branch that matches them
+        selected = None
+        if overrides:
+            for cond in edge.get("conditions", []):
+                when = cond.get("when")
+                if when is True:
+                    continue
+                branch_hints: Dict[str, Any] = {}
+                _collect_var_hints(when, branch_hints)
+                # Check if this branch is compatible with overrides
+                if any(branch_hints.get(k) == v for k, v in overrides.items() if k in branch_hints):
+                    selected = cond
+                    break
+        if selected is None:
+            # Default: first non-fallback branch
+            for cond in edge.get("conditions", []):
+                when = cond.get("when")
+                if when is True:
+                    continue
+                selected = cond
+                break
+        if selected and selected.get("when") is not True:
+            _collect_var_hints(selected["when"], hints)
+
+    # Apply overrides last
+    if overrides:
+        hints.update(overrides)
+    return hints
+
+
+def _build_node_output_hints(node: Dict[str, Any], hints: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Given a node's output mapping and global route hints, build a stub result dict
+    that satisfies downstream conditional edges.
+
+    For example, if node outputs {"classification": "$result"} and hints has
+    {"classification.route": "rt", "classification.priority_conflict": true},
+    returns {"route": "rt", "priority_conflict": true}.
+    """
+    result: Dict[str, Any] = {}
+    for state_key, expr in node.get("outputs", {}).items():
+        if not isinstance(expr, str):
+            continue
+        if expr == "$result":
+            # state.{state_key} = result — look for hints like state_key.subfield
+            prefix = state_key + "."
+            for hint_path, hint_val in hints.items():
+                if hint_path.startswith(prefix):
+                    subfield = hint_path[len(prefix):]
+                    # handle nested subfields like "a.b" → {"a": {"b": val}}
+                    parts = subfield.split(".")
+                    target = result
+                    for part in parts[:-1]:
+                        target = target.setdefault(part, {})
+                    target[parts[-1]] = hint_val
+                elif hint_path == state_key:
+                    return hint_val  # scalar hint
+        elif expr.startswith("$result."):
+            # state.{state_key} = result.{field}
+            result_field = expr[len("$result."):]
+            if state_key in hints:
+                result[result_field] = hints[state_key]
+    return result
+
+
+def _default_for_type(type_name: str) -> Any:
+    """Return a sensible default value for a state schema type."""
+    defaults = {
+        "object": {},
+        "array": [],
+        "string": "",
+        "integer": 0,
+        "number": 0.0,
+        "boolean": False,
+    }
+    return defaults.get(type_name, None)
+
+
+def _auto_registry_from_spec(spec: Dict[str, Any], route_overrides: Optional[Dict[str, Any]] = None) -> tuple:
+    """
+    Scan a graph spec and auto-register smart stub handlers for every node.
+
+    Analyzes conditional edges to understand which state values are needed
+    for routing, and generates stubs that produce compatible values.
+    This lets any spec run end-to-end without manual handler code.
+
+    Args:
+        route_overrides: Optional dict of {state_path: value} to force
+            specific routing choices. E.g., {"classification.route": "collage"}.
+
+    Returns (registry, default_llm_runner_name, default_retrieval_runner_name).
     """
     registry = LocalRegistry()
+    hints = _extract_route_hints(spec, overrides=route_overrides)
 
-    # Generic stubs
-    def _stub_llm(config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
+    # ── LLM stub: uses output_schema + route hints ──
+    def _make_llm_stub(node_spec: Dict[str, Any]) -> LLMRunner:
+        node_hints = _build_node_output_hints(node_spec, hints)
+
+        def runner(config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
+            schema = config.get("output_schema", {})
+            props = schema.get("properties", {})
+            result: Dict[str, Any] = {}
+            for key, prop in props.items():
+                # If hints tell us what value this field should have, use it
+                if key in node_hints:
+                    result[key] = node_hints[key]
+                    continue
+                t = prop.get("type", "string")
+                if t == "object":
+                    result[key] = {"stub": True}
+                elif t == "array":
+                    result[key] = []
+                elif t == "number":
+                    result[key] = 0.92
+                elif t == "integer":
+                    result[key] = 0
+                elif t == "boolean":
+                    result[key] = True
+                else:
+                    result[key] = f"stub_{key}"
+            return result or node_hints or {"stub": True}
+
+        return runner
+
+    # ── Function stub: uses route hints to generate correct routing values ──
+    def _make_function_stub(node_spec: Dict[str, Any]) -> FunctionHandler:
+        node_hints = _build_node_output_hints(node_spec, hints)
+        outputs = node_spec.get("outputs", {})
+        state_schema = spec.get("state_schema", {})
+
+        def handler(inputs: Dict[str, Any]) -> Dict[str, Any]:
+            result: Dict[str, Any] = {}
+            # Fill from hints first
+            if node_hints:
+                result.update(node_hints)
+            # Fill missing output fields with schema-aware defaults
+            for state_key, expr in outputs.items():
+                if isinstance(expr, str) and expr.startswith("$result."):
+                    field = expr[len("$result."):]
+                    if field not in result:
+                        result[field] = _default_for_type(state_schema.get(state_key, "object"))
+                elif isinstance(expr, str) and expr == "$result":
+                    # Direct mapping — if no hints, passthrough inputs
+                    if not result:
+                        return {k: v for k, v in inputs.items()}
+            return result if result else {k: v for k, v in inputs.items()}
+
+        return handler
+
+    # ── Generic tool stub ──
+    def _stub_tool(_tool_spec: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
+        return {"ok": True, "tool": _tool_spec.get("id", "unknown"), "echo": inputs, "id": "auto_001"}
+
+    # ── Generic retrieval stub ──
+    def _stub_retrieval(config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
+        return {"documents": [{"source": config.get("source", "stub"), "score": 0.9, "text": "stub doc"}]}
+
+    llm_runner_name = "auto_llm_runner"
+    retrieval_runner_name = "auto_retrieval_runner"
+
+    # Register a default LLM runner (used when no per-node runner is specified)
+    def _default_llm(config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
         schema = config.get("output_schema", {})
         props = schema.get("properties", {})
         result: Dict[str, Any] = {}
@@ -752,25 +953,28 @@ def _auto_registry_from_spec(spec: Dict[str, Any]) -> tuple:
                 result[key] = f"stub_{key}"
         return result or {"stub": True}
 
-    def _stub_tool(_tool_spec: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
-        return {"ok": True, "tool": _tool_spec.get("id", "unknown"), "echo": inputs, "id": "auto_001"}
+    registry.register_llm_runner(llm_runner_name, _default_llm)
+    registry.register_retrieval(retrieval_runner_name, _stub_retrieval)
 
-    def _stub_function(inputs: Dict[str, Any]) -> Dict[str, Any]:
-        return {k: v for k, v in inputs.items()}
-
-    llm_runner_name = "auto_llm_runner"
-    registry.register_llm_runner(llm_runner_name, _stub_llm)
-
+    # ── Register per-node stubs ──
     for node in spec.get("nodes", []):
         kind = node["kind"]
         if kind == "function":
             handler = node["config"]["handler"]
             if handler not in registry.functions:
-                registry.register_function(handler, _stub_function)
+                registry.register_function(handler, _make_function_stub(node))
         elif kind == "llm":
+            # Register a hint-aware LLM runner for each LLM node
             runner = node["config"].get("runner")
-            if runner and runner not in registry.llm_runners:
-                registry.register_llm_runner(runner, _stub_llm)
+            smart_runner = _make_llm_stub(node)
+            if runner:
+                registry.register_llm_runner(runner, smart_runner)
+            else:
+                # Override the default runner with a hint-aware version
+                # Use node id as key to avoid collisions
+                node_runner_name = f"auto_llm_{node['id']}"
+                registry.register_llm_runner(node_runner_name, smart_runner)
+                node["config"]["runner"] = node_runner_name
         elif kind == "tool":
             tool_ref = node.get("tool_ref")
             if tool_ref and tool_ref not in registry.tools:
@@ -778,11 +982,148 @@ def _auto_registry_from_spec(spec: Dict[str, Any]) -> tuple:
         elif kind == "retrieval":
             runner = node["config"].get("runner")
             if runner and runner not in registry.retrievals:
-                def _stub_retrieval(config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
-                    return {"documents": [{"source": "stub", "score": 0.9, "text": "stub doc"}]}
                 registry.register_retrieval(runner, _stub_retrieval)
 
-    return registry, llm_runner_name
+    return registry, llm_runner_name, retrieval_runner_name
+
+
+def _live_registry_from_spec(spec: Dict[str, Any]) -> tuple:
+    """
+    Build a registry with real OpenAI LLM runner, interactive approval,
+    and stub tools for a given spec. Requires OPENAI_API_KEY env var.
+    """
+    import os
+
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        raise RuntimeError(
+            "OPENAI_API_KEY environment variable is required for --live mode.\n"
+            "Set it with: export OPENAI_API_KEY='sk-...'"
+        )
+
+    try:
+        from openai import OpenAI
+    except ImportError:
+        raise RuntimeError("openai package is required for --live mode.\nInstall with: pip install openai")
+
+    client = OpenAI(api_key=api_key)
+    registry = LocalRegistry()
+
+    # ── Real OpenAI LLM runner ──
+    def openai_llm_runner(config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
+        model = config.get("model", "gpt-4.1")
+        system_prompt = config.get("system_prompt", "You are a helpful assistant. Always respond with valid JSON.")
+        prompt_template = config.get("prompt_template", "{{input}}")
+        output_schema = config.get("output_schema")
+
+        # Render template
+        prompt = prompt_template
+        for key, value in inputs.items():
+            prompt = prompt.replace("{{" + key + "}}", json.dumps(value, ensure_ascii=False) if isinstance(value, (dict, list)) else str(value))
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": prompt},
+        ]
+
+        # Use structured output if schema provided
+        if output_schema and output_schema.get("properties"):
+            response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                response_format={"type": "json_object"},
+            )
+        else:
+            response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                response_format={"type": "json_object"},
+            )
+
+        content = response.choices[0].message.content
+        try:
+            return json.loads(content)
+        except json.JSONDecodeError:
+            return {"raw_response": content}
+
+    # ── Interactive terminal approval ──
+    def interactive_approval_handler(node_spec: Dict[str, Any], state: Dict[str, Any]) -> Dict[str, Any]:
+        message = node_spec["config"].get("message_template", "Approval required")
+        node_id = node_spec["id"]
+        inputs_map = node_spec.get("inputs", {})
+        resolved = resolve_inputs(inputs_map, state)
+
+        print(f"\n{'='*60}")
+        print(f"  APPROVAL REQUIRED: {node_id}")
+        print(f"{'='*60}")
+        print(f"  {message}\n")
+        print(f"  Context:")
+        for k, v in resolved.items():
+            print(f"    {k}: {json.dumps(v, ensure_ascii=False, indent=6)}")
+        print()
+
+        while True:
+            answer = input("  Your decision [approve/reject/changes]: ").strip().lower()
+            if answer in ("approve", "approved", "ok", "yes", "y", "да"):
+                status = "approved"
+                break
+            elif answer in ("reject", "rejected", "no", "n", "нет"):
+                status = "rejected"
+                break
+            elif answer in ("changes", "revisions", "правки", "change"):
+                status = "changes_requested"
+                break
+            else:
+                print("  Please enter: approve, reject, or changes")
+
+        comments_input = input("  Comments (optional, press Enter to skip): ").strip()
+        comments = [comments_input] if comments_input else []
+
+        print(f"  → Decision: {status}")
+        print(f"{'='*60}\n")
+        return {"status": status, "comments": comments}
+
+    # ── Stub tool runner ──
+    def stub_tool(_tool_spec: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
+        tool_id = _tool_spec.get("id", "unknown")
+        print(f"  [tool] {tool_id} called with {list(inputs.keys())}")
+        return {"ok": True, "tool": tool_id, "echo": inputs, "id": "live_001"}
+
+    # ── Stub function handler ──
+    def stub_function(inputs: Dict[str, Any]) -> Dict[str, Any]:
+        return {k: v for k, v in inputs.items()}
+
+    # Register LLM runner
+    llm_runner_name = "openai_live"
+    retrieval_runner_name = "live_retrieval_runner"
+    registry.register_llm_runner(llm_runner_name, openai_llm_runner)
+
+    def _stub_retrieval(config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
+        return {"documents": [{"source": "stub", "score": 0.9, "text": "stub doc"}]}
+
+    registry.register_retrieval(retrieval_runner_name, _stub_retrieval)
+
+    # Scan spec and register handlers
+    for node in spec.get("nodes", []):
+        kind = node["kind"]
+        if kind == "function":
+            handler = node["config"]["handler"]
+            if handler not in registry.functions:
+                registry.register_function(handler, stub_function)
+        elif kind == "llm":
+            runner = node["config"].get("runner")
+            if runner and runner not in registry.llm_runners:
+                registry.register_llm_runner(runner, openai_llm_runner)
+        elif kind == "tool":
+            tool_ref = node.get("tool_ref")
+            if tool_ref and tool_ref not in registry.tools:
+                registry.register_tool(tool_ref, stub_tool)
+        elif kind == "retrieval":
+            runner = node["config"].get("runner")
+            if runner and runner not in registry.retrievals:
+                registry.register_retrieval(runner or retrieval_runner_name, _stub_retrieval)
+
+    return registry, llm_runner_name, retrieval_runner_name, interactive_approval_handler
 
 
 def _make_default_registry() -> LocalRegistry:
@@ -813,6 +1154,13 @@ def main() -> None:
     parser.add_argument("--auto", action="store_true",
                         help="Auto-generate stub handlers for all nodes and run the graph. "
                              "Works with any spec JSON without manual handler registration.")
+    parser.add_argument("--live", action="store_true",
+                        help="Live mode: real OpenAI API for LLM nodes, interactive terminal "
+                             "approval for human-in-the-loop nodes. Requires OPENAI_API_KEY.")
+    parser.add_argument("--route", type=str,
+                        help="Force a routing path in --auto mode. Pass key=value pairs separated "
+                             "by commas, e.g. 'classification.route=collage' or just a value to "
+                             "set classification.route (shorthand for the common case).")
     args = parser.parse_args()
 
     if args.write_example:
@@ -825,10 +1173,30 @@ def main() -> None:
         parser.error("--spec is required unless --write-example is used")
 
     spec = load_spec(args.spec)
+    interactive_approval = None
 
-    if args.auto:
-        registry, default_llm = _auto_registry_from_spec(spec)
-        compiler = GraphSpecCompiler(registry, default_llm_runner=default_llm)
+    if args.live:
+        registry, default_llm, default_retrieval, interactive_approval = _live_registry_from_spec(spec)
+        compiler = GraphSpecCompiler(registry, default_llm_runner=default_llm, default_retrieval_runner=default_retrieval)
+    elif args.auto:
+        route_overrides = None
+        if args.route:
+            route_overrides = {}
+            for part in args.route.split(","):
+                part = part.strip()
+                if "=" in part:
+                    k, v = part.split("=", 1)
+                    # Try to parse value as JSON for booleans/numbers
+                    try:
+                        v = json.loads(v)
+                    except (json.JSONDecodeError, ValueError):
+                        pass
+                    route_overrides[k.strip()] = v
+                else:
+                    # Shorthand: bare value sets classification.route
+                    route_overrides["classification.route"] = part
+        registry, default_llm, default_retrieval = _auto_registry_from_spec(spec, route_overrides=route_overrides)
+        compiler = GraphSpecCompiler(registry, default_llm_runner=default_llm, default_retrieval_runner=default_retrieval)
     else:
         registry = _make_default_registry()
         compiler = GraphSpecCompiler(registry)
@@ -840,26 +1208,63 @@ def main() -> None:
     if args.print_mermaid:
         _print_mermaid(graph)
 
-    if args.invoke or args.auto:
-        payload = json.loads(args.input_json) if args.input_json else {"input": {"text": "test"}}
+    if args.invoke or args.auto or args.live:
+        if args.live and not args.input_json:
+            # Interactive input in live mode
+            print("\nEnter your request (JSON or plain text):")
+            user_input = input("> ").strip()
+            try:
+                payload = json.loads(user_input)
+            except json.JSONDecodeError:
+                payload = {"input": {"text": user_input}}
+        else:
+            payload = json.loads(args.input_json) if args.input_json else {"input": {"text": "test"}}
+
         config = {"configurable": {"thread_id": "cli-thread-1"}}
 
         if interrupt is not None:
-            # Handle interrupt loops (approval nodes) automatically in --auto mode
             from langgraph.types import Command
-            result = graph.invoke(payload, config=config)
+
+            # Pre-build hint-aware approval responses for auto mode
+            approval_map: Dict[str, Dict[str, Any]] = {}
             if args.auto:
-                for _ in range(10):
-                    state = graph.get_state(config)
-                    if not state.tasks or not any(t.interrupts for t in state.tasks):
-                        break
-                    for task in state.tasks:
-                        if task.interrupts:
-                            print(f"[auto-approve] {task.name}: {task.interrupts[0].value.get('message', '')}")
-                            result = graph.invoke(Command(resume={"status": "approved", "comments": []}), config=config)
+                node_index = {n["id"]: n for n in spec.get("nodes", [])}
+                hints = _extract_route_hints(spec, overrides=route_overrides if args.auto else None)
+                for node in spec.get("nodes", []):
+                    if node["kind"] == "approval":
+                        node_hints = _build_node_output_hints(node, hints)
+                        base = {"status": "approved", "comments": []}
+                        if node_hints:
+                            base.update(node_hints)
+                        approval_map[node["id"]] = base
+
+            result = graph.invoke(payload, config=config)
+
+            # Handle interrupt loops (approval nodes)
+            for _ in range(20):
+                state = graph.get_state(config)
+                if not state.tasks or not any(t.interrupts for t in state.tasks):
+                    break
+                for task in state.tasks:
+                    if task.interrupts:
+                        interrupt_val = task.interrupts[0].value
+                        if args.live and interactive_approval:
+                            # Find matching node spec for interactive approval
+                            node_spec = next((n for n in spec["nodes"] if n["id"] == task.name), None)
+                            if node_spec:
+                                current_state = graph.get_state(config).values
+                                approval_result = interactive_approval(node_spec, current_state)
+                            else:
+                                approval_result = {"status": "approved", "comments": []}
+                            result = graph.invoke(Command(resume=approval_result), config=config)
+                        elif args.auto:
+                            approval_result = approval_map.get(task.name, {"status": "approved", "comments": []})
+                            print(f"[auto-approve] {task.name}: {interrupt_val.get('message', '')}")
+                            result = graph.invoke(Command(resume=approval_result), config=config)
         else:
             result = graph.invoke(payload, config=config)
 
+        print("\n── Result ──")
         print(json.dumps(result, ensure_ascii=False, indent=2))
 
 
