@@ -728,15 +728,203 @@ EXAMPLE_SPEC = {
 }
 
 
-def _auto_registry_from_spec(spec: Dict[str, Any]) -> tuple:
+def _collect_var_hints(expr: Any, hints: Dict[str, Any]) -> None:
+    """Recursively extract {var_path: expected_value} from a JSONLogic condition."""
+    if not isinstance(expr, dict):
+        return
+    if "==" in expr:
+        a, b = expr["=="]
+        if isinstance(a, dict) and "var" in a and not isinstance(b, dict):
+            path = a["var"]
+            if path not in hints:
+                hints[path] = b
+        elif isinstance(b, dict) and "var" in b and not isinstance(a, dict):
+            path = b["var"]
+            if path not in hints:
+                hints[path] = a
+    for op in ("and", "or"):
+        if op in expr:
+            for sub in expr[op]:
+                _collect_var_hints(sub, hints)
+
+
+def _extract_route_hints(spec: Dict[str, Any], overrides: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """
-    Scan a graph spec and auto-register stub handlers for every node.
-    Returns (registry, default_llm_runner_name).
+    Scan conditional edges in the spec, pick the first non-fallback branch
+    of each conditional, and extract {state_path: expected_value}.
+
+    If overrides are provided, matching hints are replaced. This lets the
+    caller force a specific route (e.g., {"classification.route": "collage"}).
+
+    Example result: {"brief_validation.status": "complete", "classification.route": "rt"}
+    """
+    hints: Dict[str, Any] = {}
+    for edge in spec.get("edges", []):
+        if edge.get("type") != "conditional":
+            continue
+        # If we have overrides, try to find the branch that matches them
+        selected = None
+        if overrides:
+            for cond in edge.get("conditions", []):
+                when = cond.get("when")
+                if when is True:
+                    continue
+                branch_hints: Dict[str, Any] = {}
+                _collect_var_hints(when, branch_hints)
+                # Check if this branch is compatible with overrides
+                if any(branch_hints.get(k) == v for k, v in overrides.items() if k in branch_hints):
+                    selected = cond
+                    break
+        if selected is None:
+            # Default: first non-fallback branch
+            for cond in edge.get("conditions", []):
+                when = cond.get("when")
+                if when is True:
+                    continue
+                selected = cond
+                break
+        if selected and selected.get("when") is not True:
+            _collect_var_hints(selected["when"], hints)
+
+    # Apply overrides last
+    if overrides:
+        hints.update(overrides)
+    return hints
+
+
+def _build_node_output_hints(node: Dict[str, Any], hints: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Given a node's output mapping and global route hints, build a stub result dict
+    that satisfies downstream conditional edges.
+
+    For example, if node outputs {"classification": "$result"} and hints has
+    {"classification.route": "rt", "classification.priority_conflict": true},
+    returns {"route": "rt", "priority_conflict": true}.
+    """
+    result: Dict[str, Any] = {}
+    for state_key, expr in node.get("outputs", {}).items():
+        if not isinstance(expr, str):
+            continue
+        if expr == "$result":
+            # state.{state_key} = result — look for hints like state_key.subfield
+            prefix = state_key + "."
+            for hint_path, hint_val in hints.items():
+                if hint_path.startswith(prefix):
+                    subfield = hint_path[len(prefix):]
+                    # handle nested subfields like "a.b" → {"a": {"b": val}}
+                    parts = subfield.split(".")
+                    target = result
+                    for part in parts[:-1]:
+                        target = target.setdefault(part, {})
+                    target[parts[-1]] = hint_val
+                elif hint_path == state_key:
+                    return hint_val  # scalar hint
+        elif expr.startswith("$result."):
+            # state.{state_key} = result.{field}
+            result_field = expr[len("$result."):]
+            if state_key in hints:
+                result[result_field] = hints[state_key]
+    return result
+
+
+def _default_for_type(type_name: str) -> Any:
+    """Return a sensible default value for a state schema type."""
+    defaults = {
+        "object": {},
+        "array": [],
+        "string": "",
+        "integer": 0,
+        "number": 0.0,
+        "boolean": False,
+    }
+    return defaults.get(type_name, None)
+
+
+def _auto_registry_from_spec(spec: Dict[str, Any], route_overrides: Optional[Dict[str, Any]] = None) -> tuple:
+    """
+    Scan a graph spec and auto-register smart stub handlers for every node.
+
+    Analyzes conditional edges to understand which state values are needed
+    for routing, and generates stubs that produce compatible values.
+    This lets any spec run end-to-end without manual handler code.
+
+    Args:
+        route_overrides: Optional dict of {state_path: value} to force
+            specific routing choices. E.g., {"classification.route": "collage"}.
+
+    Returns (registry, default_llm_runner_name, default_retrieval_runner_name).
     """
     registry = LocalRegistry()
+    hints = _extract_route_hints(spec, overrides=route_overrides)
 
-    # Generic stubs
-    def _stub_llm(config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
+    # ── LLM stub: uses output_schema + route hints ──
+    def _make_llm_stub(node_spec: Dict[str, Any]) -> LLMRunner:
+        node_hints = _build_node_output_hints(node_spec, hints)
+
+        def runner(config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
+            schema = config.get("output_schema", {})
+            props = schema.get("properties", {})
+            result: Dict[str, Any] = {}
+            for key, prop in props.items():
+                # If hints tell us what value this field should have, use it
+                if key in node_hints:
+                    result[key] = node_hints[key]
+                    continue
+                t = prop.get("type", "string")
+                if t == "object":
+                    result[key] = {"stub": True}
+                elif t == "array":
+                    result[key] = []
+                elif t == "number":
+                    result[key] = 0.92
+                elif t == "integer":
+                    result[key] = 0
+                elif t == "boolean":
+                    result[key] = True
+                else:
+                    result[key] = f"stub_{key}"
+            return result or node_hints or {"stub": True}
+
+        return runner
+
+    # ── Function stub: uses route hints to generate correct routing values ──
+    def _make_function_stub(node_spec: Dict[str, Any]) -> FunctionHandler:
+        node_hints = _build_node_output_hints(node_spec, hints)
+        outputs = node_spec.get("outputs", {})
+        state_schema = spec.get("state_schema", {})
+
+        def handler(inputs: Dict[str, Any]) -> Dict[str, Any]:
+            result: Dict[str, Any] = {}
+            # Fill from hints first
+            if node_hints:
+                result.update(node_hints)
+            # Fill missing output fields with schema-aware defaults
+            for state_key, expr in outputs.items():
+                if isinstance(expr, str) and expr.startswith("$result."):
+                    field = expr[len("$result."):]
+                    if field not in result:
+                        result[field] = _default_for_type(state_schema.get(state_key, "object"))
+                elif isinstance(expr, str) and expr == "$result":
+                    # Direct mapping — if no hints, passthrough inputs
+                    if not result:
+                        return {k: v for k, v in inputs.items()}
+            return result if result else {k: v for k, v in inputs.items()}
+
+        return handler
+
+    # ── Generic tool stub ──
+    def _stub_tool(_tool_spec: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
+        return {"ok": True, "tool": _tool_spec.get("id", "unknown"), "echo": inputs, "id": "auto_001"}
+
+    # ── Generic retrieval stub ──
+    def _stub_retrieval(config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
+        return {"documents": [{"source": config.get("source", "stub"), "score": 0.9, "text": "stub doc"}]}
+
+    llm_runner_name = "auto_llm_runner"
+    retrieval_runner_name = "auto_retrieval_runner"
+
+    # Register a default LLM runner (used when no per-node runner is specified)
+    def _default_llm(config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
         schema = config.get("output_schema", {})
         props = schema.get("properties", {})
         result: Dict[str, Any] = {}
@@ -756,31 +944,28 @@ def _auto_registry_from_spec(spec: Dict[str, Any]) -> tuple:
                 result[key] = f"stub_{key}"
         return result or {"stub": True}
 
-    def _stub_tool(_tool_spec: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
-        return {"ok": True, "tool": _tool_spec.get("id", "unknown"), "echo": inputs, "id": "auto_001"}
-
-    def _stub_function(inputs: Dict[str, Any]) -> Dict[str, Any]:
-        return {k: v for k, v in inputs.items()}
-
-    llm_runner_name = "auto_llm_runner"
-    retrieval_runner_name = "auto_retrieval_runner"
-    registry.register_llm_runner(llm_runner_name, _stub_llm)
-
-    def _stub_retrieval(config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
-        return {"documents": [{"source": "stub", "score": 0.9, "text": "stub doc"}]}
-
+    registry.register_llm_runner(llm_runner_name, _default_llm)
     registry.register_retrieval(retrieval_runner_name, _stub_retrieval)
 
+    # ── Register per-node stubs ──
     for node in spec.get("nodes", []):
         kind = node["kind"]
         if kind == "function":
             handler = node["config"]["handler"]
             if handler not in registry.functions:
-                registry.register_function(handler, _stub_function)
+                registry.register_function(handler, _make_function_stub(node))
         elif kind == "llm":
+            # Register a hint-aware LLM runner for each LLM node
             runner = node["config"].get("runner")
-            if runner and runner not in registry.llm_runners:
-                registry.register_llm_runner(runner, _stub_llm)
+            smart_runner = _make_llm_stub(node)
+            if runner:
+                registry.register_llm_runner(runner, smart_runner)
+            else:
+                # Override the default runner with a hint-aware version
+                # Use node id as key to avoid collisions
+                node_runner_name = f"auto_llm_{node['id']}"
+                registry.register_llm_runner(node_runner_name, smart_runner)
+                node["config"]["runner"] = node_runner_name
         elif kind == "tool":
             tool_ref = node.get("tool_ref")
             if tool_ref and tool_ref not in registry.tools:
@@ -788,7 +973,7 @@ def _auto_registry_from_spec(spec: Dict[str, Any]) -> tuple:
         elif kind == "retrieval":
             runner = node["config"].get("runner")
             if runner and runner not in registry.retrievals:
-                registry.register_retrieval(runner or retrieval_runner_name, _stub_retrieval)
+                registry.register_retrieval(runner, _stub_retrieval)
 
     return registry, llm_runner_name, retrieval_runner_name
 
@@ -963,6 +1148,10 @@ def main() -> None:
     parser.add_argument("--live", action="store_true",
                         help="Live mode: real OpenAI API for LLM nodes, interactive terminal "
                              "approval for human-in-the-loop nodes. Requires OPENAI_API_KEY.")
+    parser.add_argument("--route", type=str,
+                        help="Force a routing path in --auto mode. Pass key=value pairs separated "
+                             "by commas, e.g. 'classification.route=collage' or just a value to "
+                             "set classification.route (shorthand for the common case).")
     args = parser.parse_args()
 
     if args.write_example:
@@ -981,7 +1170,23 @@ def main() -> None:
         registry, default_llm, default_retrieval, interactive_approval = _live_registry_from_spec(spec)
         compiler = GraphSpecCompiler(registry, default_llm_runner=default_llm, default_retrieval_runner=default_retrieval)
     elif args.auto:
-        registry, default_llm, default_retrieval = _auto_registry_from_spec(spec)
+        route_overrides = None
+        if args.route:
+            route_overrides = {}
+            for part in args.route.split(","):
+                part = part.strip()
+                if "=" in part:
+                    k, v = part.split("=", 1)
+                    # Try to parse value as JSON for booleans/numbers
+                    try:
+                        v = json.loads(v)
+                    except (json.JSONDecodeError, ValueError):
+                        pass
+                    route_overrides[k.strip()] = v
+                else:
+                    # Shorthand: bare value sets classification.route
+                    route_overrides["classification.route"] = part
+        registry, default_llm, default_retrieval = _auto_registry_from_spec(spec, route_overrides=route_overrides)
         compiler = GraphSpecCompiler(registry, default_llm_runner=default_llm, default_retrieval_runner=default_retrieval)
     else:
         registry = _make_default_registry()
