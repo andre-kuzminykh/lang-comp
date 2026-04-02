@@ -187,16 +187,43 @@ def persist_knowledge(inputs: Dict[str, Any]) -> Dict[str, Any]:
                 cycle=cycle,
             )
 
-    # Trajectories
+    # Trajectories — and auto-promote successful ones to recipes
     traj = output.get("trajectory")
     if isinstance(traj, dict) and traj.get("steps"):
-        engine.record_trajectory(
+        tid = engine.record_trajectory(
             steps=traj["steps"],
             outcome=traj.get("outcome", ""),
             success=traj.get("success", False),
             tags=traj.get("tags", []),
             source_cycle=cycle,
         )
+        # Auto-promote successful trajectories to recipes (Tier 0 accretion)
+        if traj.get("success") and traj.get("tags"):
+            engine.compile_recipe(
+                trajectory_id=tid,
+                name=f"recipe_{domain_hint}_{cycle}" if (domain_hint := traj.get("tags", [""])[0]) else f"recipe_{cycle}",
+                tags=traj.get("tags", []),
+            )
+            engine.record_execution_tier(3)  # This cycle used full reasoning
+
+    # Pending outcomes (delayed credit assignment)
+    for po in output.get("pending_outcomes", []):
+        if isinstance(po, dict) and po.get("description"):
+            engine.add_pending_outcome(
+                description=po["description"],
+                related_entry_ids=po.get("related_entry_ids", []),
+                check_after_cycles=po.get("check_after_cycles", 5),
+                source_cycle=cycle,
+            )
+
+    # Check and resolve any due pending outcomes
+    due = engine.get_due_pending_outcomes()
+    for po in due:
+        # Mark as needing check — actual resolution comes from outcome observer
+        engine.journal_entry(cycle, "pending_outcome_due", {
+            "pending_id": po["id"],
+            "description": po["description"],
+        })
 
     # Apply credit assignments from scorer
     if isinstance(credit_assignments, list):

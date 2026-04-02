@@ -90,6 +90,15 @@ class StateEngine:
                 ],
                 "max_auto_iterations": 20,
             },
+            "pending_outcomes": [],
+            "recipes": [],
+            "relationships": [],
+            "cost_tiers": {
+                "tier_0_cached": 0,
+                "tier_1_semantic": 0,
+                "tier_2_visual": 0,
+                "tier_3_reasoning": 0,
+            },
             "cycle_count": 0,
             "journal": [],
         }
@@ -288,6 +297,236 @@ class StateEngine:
         self.save()
         return pid
 
+    # ── pending outcomes (delayed credit assignment) ──────────
+
+    def add_pending_outcome(
+        self,
+        description: str,
+        related_entry_ids: List[str],
+        check_after_cycles: int = 5,
+        source_cycle: Optional[int] = None,
+    ) -> str:
+        """Record an outcome that can only be observed later.
+
+        The system will re-check after `check_after_cycles` cycles.
+        This solves delayed credit assignment: a partnership approach
+        tried today may only show results weeks later.
+        """
+        pid = _new_id()
+        current_cycle = self.data["cycle_count"]
+        self.data["pending_outcomes"].append({
+            "id": pid,
+            "description": description,
+            "related_entry_ids": related_entry_ids,
+            "check_after_cycle": current_cycle + check_after_cycles,
+            "source_cycle": source_cycle or current_cycle,
+            "created": _now(),
+            "resolved": False,
+            "resolution": None,
+        })
+        self.save()
+        return pid
+
+    def get_due_pending_outcomes(self) -> List[Dict[str, Any]]:
+        """Return pending outcomes that are due for checking."""
+        current_cycle = self.data["cycle_count"]
+        return [
+            po for po in self.data["pending_outcomes"]
+            if not po.get("resolved") and po.get("check_after_cycle", 0) <= current_cycle
+        ]
+
+    def resolve_pending_outcome(
+        self, pending_id: str, success: bool, evidence: Optional[str] = None
+    ) -> None:
+        """Resolve a pending outcome and propagate credit to related entries."""
+        for po in self.data["pending_outcomes"]:
+            if po["id"] == pending_id and not po.get("resolved"):
+                po["resolved"] = True
+                po["resolution"] = {
+                    "success": success,
+                    "evidence": evidence,
+                    "resolved_at": _now(),
+                    "resolved_cycle": self.data["cycle_count"],
+                }
+                # Credit assignment
+                for eid in po.get("related_entry_ids", []):
+                    self.record_outcome(eid, success)
+                # Also record as a full outcome
+                self.record_observed_outcome(
+                    description=f"[Resolved pending] {po['description']}",
+                    related_entry_ids=po.get("related_entry_ids", []),
+                    success=success,
+                    evidence=evidence,
+                    cycle=self.data["cycle_count"],
+                )
+                self.save()
+                return
+
+    # ── recipes (successful traces → replayable procedures) ──
+
+    def compile_recipe(
+        self,
+        trajectory_id: str,
+        name: str,
+        tags: Optional[List[str]] = None,
+    ) -> Optional[str]:
+        """Promote a successful trajectory into a replayable recipe.
+
+        Only successful trajectories with sufficient confidence can become
+        recipes.  Recipes are scored separately and can be quarantined
+        if their performance degrades.
+        """
+        traj = None
+        for t in self.data["trajectories"]:
+            if t["id"] == trajectory_id:
+                traj = t
+                break
+        if not traj or not traj.get("success"):
+            return None
+
+        rid = _new_id()
+        self.data["recipes"].append({
+            "id": rid,
+            "name": name,
+            "source_trajectory": trajectory_id,
+            "steps": traj["steps"],
+            "tags": tags or traj.get("tags", []),
+            "score": BetaScore(alpha=2.0, beta=1.0, last_updated=_now()).to_dict(),
+            "status": "active",  # active | quarantined
+            "created": _now(),
+            "replay_count": 0,
+        })
+        self.save()
+        return rid
+
+    def get_recipe(self, tags: List[str]) -> Optional[Dict[str, Any]]:
+        """Find the best active recipe matching the given tags (Thompson sampling)."""
+        candidates = [
+            r for r in self.data["recipes"]
+            if r.get("status") == "active"
+            and len(set(r.get("tags", [])) & set(tags)) > 0
+        ]
+        if not candidates:
+            return None
+        ranked = rank_entries(candidates, top_k=1)
+        return ranked[0] if ranked else None
+
+    def record_recipe_outcome(self, recipe_id: str, success: bool) -> None:
+        """Score a recipe replay.  Quarantine if score drops below threshold."""
+        for r in self.data["recipes"]:
+            if r["id"] == recipe_id:
+                bs = BetaScore.from_dict(r["score"])
+                if success:
+                    bs.record_success()
+                else:
+                    bs.record_failure()
+                r["score"] = bs.to_dict()
+                r["replay_count"] = r.get("replay_count", 0) + 1
+                # Quarantine if mean drops below 0.3 with enough evidence
+                if bs.mean < 0.3 and bs.evidence >= 5:
+                    r["status"] = "quarantined"
+                self.save()
+                return
+
+    # ── relationships (entity-to-entity scored edges) ────────
+
+    def add_relationship(
+        self,
+        entity_a_id: str,
+        entity_b_id: str,
+        relation_type: str = "knows",
+        attributes: Optional[Dict[str, Any]] = None,
+        tags: Optional[List[str]] = None,
+    ) -> str:
+        """Create or update a scored edge between two entities."""
+        # Check for existing relationship
+        for rel in self.data["relationships"]:
+            if (
+                (rel["entity_a"] == entity_a_id and rel["entity_b"] == entity_b_id)
+                or (rel["entity_a"] == entity_b_id and rel["entity_b"] == entity_a_id)
+            ) and rel["relation_type"] == relation_type:
+                if attributes:
+                    rel["attributes"].update(attributes)
+                if tags:
+                    rel["tags"] = list(set(rel.get("tags", []) + tags))
+                rel["updated"] = _now()
+                self.save()
+                return rel["id"]
+
+        rid = _new_id()
+        self.data["relationships"].append({
+            "id": rid,
+            "entity_a": entity_a_id,
+            "entity_b": entity_b_id,
+            "relation_type": relation_type,
+            "attributes": attributes or {},
+            "tags": tags or [],
+            "score": BetaScore(last_updated=_now()).to_dict(),
+            "created": _now(),
+            "updated": _now(),
+        })
+        self.save()
+        return rid
+
+    def get_entity_relationships(self, entity_id: str) -> List[Dict[str, Any]]:
+        """Get all relationships for an entity."""
+        return [
+            r for r in self.data["relationships"]
+            if r["entity_a"] == entity_id or r["entity_b"] == entity_id
+        ]
+
+    def record_relationship_outcome(
+        self, relationship_id: str, success: bool
+    ) -> None:
+        """Score a relationship interaction."""
+        for rel in self.data["relationships"]:
+            if rel["id"] == relationship_id:
+                bs = BetaScore.from_dict(rel["score"])
+                if success:
+                    bs.record_success()
+                else:
+                    bs.record_failure()
+                rel["score"] = bs.to_dict()
+                self.save()
+                return
+
+    # ── cost tiers (execution cost tracking) ─────────────────
+
+    def record_execution_tier(self, tier: int) -> None:
+        """Record which cost tier was used for an execution step.
+
+        Tier 0: Cached recipe replay (cheapest)
+        Tier 1: Semantic recovery (selector-based)
+        Tier 2: Visual grounding (screenshot-based)
+        Tier 3: Full HIDL reasoning (most expensive)
+        """
+        tier_keys = {
+            0: "tier_0_cached",
+            1: "tier_1_semantic",
+            2: "tier_2_visual",
+            3: "tier_3_reasoning",
+        }
+        key = tier_keys.get(tier)
+        if key:
+            self.data["cost_tiers"][key] = self.data["cost_tiers"].get(key, 0) + 1
+            self.save()
+
+    def get_cost_distribution(self) -> Dict[str, int]:
+        """Return the distribution of execution across cost tiers."""
+        return dict(self.data.get("cost_tiers", {}))
+
+    def get_cost_compression_ratio(self) -> float:
+        """Ratio of cheap executions (tier 0-1) to expensive (tier 2-3).
+
+        Higher = more accreted (more work replays cheaply).
+        """
+        tiers = self.data.get("cost_tiers", {})
+        cheap = tiers.get("tier_0_cached", 0) + tiers.get("tier_1_semantic", 0)
+        expensive = tiers.get("tier_2_visual", 0) + tiers.get("tier_3_reasoning", 0)
+        if expensive == 0:
+            return float("inf") if cheap > 0 else 0.0
+        return cheap / expensive
+
     # ── owner directives ─────────────────────────────────────
 
     def add_directive(self, content: str, priority: int = 0) -> str:
@@ -359,6 +598,19 @@ class StateEngine:
                 traj_candidates.append(t)
         ranked_trajectories = rank_entries(traj_candidates, top_k=5)
 
+        # Due pending outcomes
+        pending_due = self.get_due_pending_outcomes()
+
+        # Relevant recipes
+        recipe = self.get_recipe(task_tags) if task_tags else None
+
+        # Relationships for relevant entities
+        relationships = []
+        entity_ids = {e["id"] for e in entities}
+        for rel in self.data.get("relationships", []):
+            if rel["entity_a"] in entity_ids or rel["entity_b"] in entity_ids:
+                relationships.append(rel)
+
         return {
             "task_tags": task_tags,
             "compiled_at": now,
@@ -367,8 +619,12 @@ class StateEngine:
             "knowledge": ranked_knowledge,
             "warnings": warnings,
             "entities": entities,
+            "relationships": relationships,
             "trajectories": ranked_trajectories,
+            "pending_outcomes_due": pending_due,
+            "recipe": recipe,
             "governance": self.data["governance"],
+            "cost_compression": self.get_cost_compression_ratio(),
         }
 
     # ── cycle management ─────────────────────────────────────
@@ -393,6 +649,7 @@ class StateEngine:
     # ── stats ────────────────────────────────────────────────
 
     def stats(self) -> Dict[str, Any]:
+        pending = self.data.get("pending_outcomes", [])
         return {
             "cycles": self.data["cycle_count"],
             "knowledge_entries": len(self.data["knowledge"]),
@@ -402,5 +659,9 @@ class StateEngine:
             "outcomes": len(self.data["outcomes"]),
             "proofs": len(self.data["proofs"]),
             "directives": len(self.data["owner_directives"]),
+            "recipes": len(self.data.get("recipes", [])),
+            "relationships": len(self.data.get("relationships", [])),
+            "pending_outcomes": len([p for p in pending if not p.get("resolved")]),
+            "cost_compression": self.get_cost_compression_ratio(),
             "journal_entries": len(self.data["journal"]),
         }
