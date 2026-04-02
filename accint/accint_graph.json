@@ -1,0 +1,295 @@
+{
+  "graph_id": "accint_cycle_v1",
+
+  "state_schema": {
+    "input": "object",
+    "domain": "string",
+    "objective": "string",
+    "brief": "object",
+    "judgment_packet": "object",
+    "receipt": "object",
+    "plan": "object",
+    "actions": "array",
+    "observations": "array",
+    "strategist_output": "object",
+    "credit_assignments": "array",
+    "outcome_observations": "array",
+    "pending_outcomes": "array",
+    "new_knowledge_ids": "array",
+    "new_warning_ids": "array",
+    "governance_check": "object",
+    "cycle_number": "integer",
+    "cycle_summary": "object",
+    "error": "object"
+  },
+
+  "tools": [],
+
+  "nodes": [
+    {
+      "id": "begin_cycle",
+      "kind": "function",
+      "inputs": {
+        "input": "$state.input"
+      },
+      "outputs": {
+        "cycle_number": "$result.cycle_number",
+        "domain": "$result.domain",
+        "objective": "$result.objective"
+      },
+      "config": {
+        "handler": "accint.handlers.begin_cycle"
+      },
+      "tool_ref": null
+    },
+    {
+      "id": "compile_brief",
+      "kind": "llm",
+      "inputs": {
+        "raw_input": "$state.input",
+        "domain": "$state.domain",
+        "objective": "$state.objective"
+      },
+      "outputs": {
+        "brief": "$result"
+      },
+      "config": {
+        "model": "claude-sonnet-4-20250514",
+        "system_prompt": "You are the AccInt Brief Generator. Take a raw task description and compile it into a structured brief. Output a JSON with: title, domain, objective, tags (list), constraints (list), relevant_entities (list), urgency (low|normal|high|critical), success_criteria (list).",
+        "prompt_template": "Raw input: {{raw_input}}\nDomain: {{domain}}\nObjective: {{objective}}\n\nCompile a structured brief as JSON.",
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "title": {"type": "string"},
+            "domain": {"type": "string"},
+            "objective": {"type": "string"},
+            "tags": {"type": "array"},
+            "constraints": {"type": "array"},
+            "relevant_entities": {"type": "array"},
+            "urgency": {"type": "string", "enum": ["low", "normal", "high", "critical"]},
+            "success_criteria": {"type": "array"}
+          },
+          "required": ["title", "domain", "objective", "tags", "urgency", "success_criteria"]
+        }
+      },
+      "tool_ref": null
+    },
+    {
+      "id": "compile_judgment",
+      "kind": "function",
+      "inputs": {
+        "brief": "$state.brief"
+      },
+      "outputs": {
+        "judgment_packet": "$result"
+      },
+      "config": {
+        "handler": "accint.handlers.compile_judgment"
+      },
+      "tool_ref": null
+    },
+    {
+      "id": "strategist_reason",
+      "kind": "llm",
+      "inputs": {
+        "domain": "$state.domain",
+        "objective": "$state.objective",
+        "judgment_packet": "$state.judgment_packet",
+        "brief": "$state.brief"
+      },
+      "outputs": {
+        "strategist_output": "$result"
+      },
+      "config": {
+        "model": "claude-sonnet-4-20250514",
+        "system_prompt": "You are the AccInt Strategist — the reasoning layer of an accreted intelligence system.\n\nIntelligence lives in scored state, not in you. You are a temporary processor.\nThe scored knowledge, warnings, entities, and trajectories you receive represent\ntested judgment accumulated across many cycles.\n\nBefore planning, you MUST review every entry in the judgment packet and produce\na structured RECEIPT with: applied (entries you used), dismissed (entries that\ndon't apply — explain why), noted (entries you're aware of).\n\nThen produce a plan with: objective, approach (shaped by scored state),\nentities involved, risks (from warnings), success criteria, pending outcomes.\n\nAfter planning, record: new_knowledge (insights), new_warnings (failures),\nentity_updates, outcome_records, pending_outcomes, trajectory.",
+        "prompt_template": "Domain: {{domain}}\nObjective: {{objective}}\n\nBrief:\n{{brief}}\n\nJudgment Packet:\n{{judgment_packet}}\n\nReview the judgment packet, produce your receipt, plan your approach,\nand record observations. Return structured JSON with:\nreceipt, plan, actions, observations, new_knowledge, new_warnings,\nentity_updates, outcome_records, pending_outcomes, trajectory.",
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "receipt": {
+              "type": "object",
+              "properties": {
+                "applied": {"type": "array"},
+                "dismissed": {"type": "array"},
+                "noted": {"type": "array"}
+              }
+            },
+            "plan": {"type": "object"},
+            "actions": {"type": "array"},
+            "observations": {"type": "array"},
+            "new_knowledge": {"type": "array"},
+            "new_warnings": {"type": "array"},
+            "entity_updates": {"type": "array"},
+            "outcome_records": {"type": "array"},
+            "pending_outcomes": {"type": "array"},
+            "trajectory": {"type": "object"}
+          },
+          "required": ["receipt", "plan", "new_knowledge", "new_warnings", "outcome_records"]
+        }
+      },
+      "tool_ref": null
+    },
+    {
+      "id": "validate_receipt",
+      "kind": "function",
+      "inputs": {
+        "strategist_output": "$state.strategist_output",
+        "judgment_packet": "$state.judgment_packet"
+      },
+      "outputs": {
+        "receipt": "$result"
+      },
+      "config": {
+        "handler": "accint.handlers.validate_receipt"
+      },
+      "tool_ref": null
+    },
+    {
+      "id": "score_outcomes",
+      "kind": "llm",
+      "inputs": {
+        "outcome_records": "$state.strategist_output",
+        "judgment_packet": "$state.judgment_packet"
+      },
+      "outputs": {
+        "credit_assignments": "$result.assignments"
+      },
+      "config": {
+        "model": "claude-sonnet-4-20250514",
+        "system_prompt": "You are the AccInt Scorer — the credit assignment layer.\n\nLook at what happened (outcomes) and determine which prior knowledge entries\ndeserve credit or blame. A clear causal link to a positive outcome = SUCCESS.\nA clear causal link to a negative outcome = FAILURE. Ambiguous = partial weight.\nNo causal link = no credit.\n\nBe conservative. Wrong credit assignment is worse than no credit assignment.",
+        "prompt_template": "Outcomes from this cycle:\n{{outcome_records}}\n\nAvailable knowledge entries:\n{{judgment_packet}}\n\nReturn JSON: {\"assignments\": [{\"entry_id\": \"...\", \"success\": true/false, \"weight\": 0.0-1.0, \"reasoning\": \"...\"}]}",
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "assignments": {
+              "type": "array"
+            }
+          },
+          "required": ["assignments"]
+        }
+      },
+      "tool_ref": null
+    },
+    {
+      "id": "persist_knowledge",
+      "kind": "function",
+      "inputs": {
+        "strategist_output": "$state.strategist_output",
+        "credit_assignments": "$state.credit_assignments",
+        "cycle_number": "$state.cycle_number"
+      },
+      "outputs": {
+        "new_knowledge_ids": "$result.knowledge_ids",
+        "new_warning_ids": "$result.warning_ids"
+      },
+      "config": {
+        "handler": "accint.handlers.persist_knowledge"
+      },
+      "tool_ref": null
+    },
+    {
+      "id": "check_self_improvement",
+      "kind": "function",
+      "inputs": {
+        "strategist_output": "$state.strategist_output",
+        "cycle_number": "$state.cycle_number"
+      },
+      "outputs": {
+        "governance_check": "$result"
+      },
+      "config": {
+        "handler": "accint.handlers.check_self_improvement"
+      },
+      "tool_ref": null
+    },
+    {
+      "id": "close_cycle",
+      "kind": "function",
+      "inputs": {
+        "cycle_number": "$state.cycle_number",
+        "domain": "$state.domain",
+        "strategist_output": "$state.strategist_output",
+        "new_knowledge_ids": "$state.new_knowledge_ids",
+        "new_warning_ids": "$state.new_warning_ids",
+        "credit_assignments": "$state.credit_assignments",
+        "governance_check": "$state.governance_check"
+      },
+      "outputs": {
+        "cycle_summary": "$result"
+      },
+      "config": {
+        "handler": "accint.handlers.close_cycle"
+      },
+      "tool_ref": null
+    }
+  ],
+
+  "edges": [
+    {
+      "from": "START",
+      "to": "begin_cycle",
+      "type": "direct"
+    },
+    {
+      "from": "begin_cycle",
+      "to": "compile_brief",
+      "type": "direct"
+    },
+    {
+      "from": "compile_brief",
+      "to": "compile_judgment",
+      "type": "direct"
+    },
+    {
+      "from": "compile_judgment",
+      "to": "strategist_reason",
+      "type": "direct"
+    },
+    {
+      "from": "strategist_reason",
+      "to": "validate_receipt",
+      "type": "direct"
+    },
+    {
+      "from": "validate_receipt",
+      "type": "conditional",
+      "conditions": [
+        {
+          "when": {
+            "==": [{"var": "receipt.valid"}, true]
+          },
+          "to": "score_outcomes"
+        },
+        {
+          "when": true,
+          "to": "strategist_reason"
+        }
+      ]
+    },
+    {
+      "from": "score_outcomes",
+      "to": "persist_knowledge",
+      "type": "direct"
+    },
+    {
+      "from": "persist_knowledge",
+      "to": "check_self_improvement",
+      "type": "direct"
+    },
+    {
+      "from": "check_self_improvement",
+      "to": "close_cycle",
+      "type": "direct"
+    },
+    {
+      "from": "close_cycle",
+      "to": "END",
+      "type": "direct"
+    }
+  ],
+
+  "execution": {
+    "requires_checkpointer": true
+  }
+}

@@ -1,2 +1,4 @@
 __pycache__/
 *.pyc
+accint_state.json
+accint_stop
