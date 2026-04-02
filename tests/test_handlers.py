@@ -72,7 +72,9 @@ class TestValidateReceipt:
         assert result["valid"] is True
         assert result["applied_count"] == 1
 
-    def test_missing_citations(self, engine):
+    def test_missing_citations_lenient(self, engine):
+        """With lenient validation, empty receipt with entries is accepted
+        (avoids infinite retry loops with real LLMs)."""
         kid = engine.add_knowledge("insight", ["tag"])
         result = validate_receipt({
             "strategist_output": {
@@ -87,13 +89,23 @@ class TestValidateReceipt:
                 "warnings": [],
             },
         })
-        assert result["valid"] is False
-        assert kid in result["missing_ids"]
+        # Lenient: accepts even with missing citations to avoid infinite loops
+        assert result["valid"] is True
 
-    def test_no_receipt(self, engine):
+    def test_no_receipt_empty_packet(self, engine):
+        """No receipt with empty packet is valid (first cycle)."""
         result = validate_receipt({
             "strategist_output": {},
             "judgment_packet": {"knowledge": [], "warnings": []},
+        })
+        assert result["valid"] is True
+
+    def test_no_receipt_with_entries(self, engine):
+        """No receipt with actual entries to cite is invalid."""
+        kid = engine.add_knowledge("insight", ["tag"])
+        result = validate_receipt({
+            "strategist_output": {},
+            "judgment_packet": {"knowledge": [{"id": kid}], "warnings": []},
         })
         assert result["valid"] is False
 
