@@ -172,6 +172,9 @@ def openai_llm_runner(config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[st
 
     client = OpenAI()
     model = config.get("model", "gpt-4.1")
+    # Override non-OpenAI model names
+    if "claude" in model or "anthropic" in model:
+        model = "gpt-4.1"
     system_prompt = config.get("system_prompt", "You are a helpful assistant.")
     prompt_template = config.get("prompt_template", "")
 
