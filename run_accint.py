@@ -202,9 +202,11 @@ def openai_llm_runner(config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[st
     )
 
     text = response.choices[0].message.content
+    print(f"\n  [OpenAI response preview] {text[:300]}...")
     try:
         return json.loads(text)
     except json.JSONDecodeError:
+        print(f"  [OpenAI parse error] Could not parse JSON")
         return {"raw_response": text, "parse_error": True}
 
 
