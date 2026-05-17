@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Что нас ждёт — концентрическая схема</title>
+<style>
+  :root {
+    --bg: #0a0a0a;
+    --bg-soft: #141414;
+    --line: #2a2a2a;
+    --text: #ededed;
+    --text-soft: #888;
+    --accent: #39ff14;
+    --accent-dim: #1a8a08;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Iowan Old Style', 'Palatino', Georgia, serif;
+    font-size: 14px;
+    line-height: 1.5;
+    padding: 50px 40px;
+  }
+
+  .container { max-width: 1200px; margin: 0 auto; }
+
+  header {
+    text-align: center;
+    margin-bottom: 60px;
+    padding-bottom: 30px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  h1 {
+    font-size: 30px;
+    font-weight: 300;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+
+  .subtitle {
+    color: var(--text-soft);
+    font-size: 14px;
+    letter-spacing: 1px;
+    font-style: italic;
+  }
+
+  .formula {
+    margin-top: 24px;
+    color: var(--accent);
+    font-size: 14px;
+    font-style: italic;
+    max-width: 600px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .diagram-wrapper {
+    display: flex;
+    justify-content: center;
+    margin: 60px 0;
+  }
+
+  svg.main-diagram {
+    width: 900px;
+    height: 900px;
+  }
+
+  /* Below diagram: legend / explanation */
+  .legend {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 30px;
+    margin: 60px 0;
+  }
+
+  .legend-item {
+    border-left: 2px solid var(--accent);
+    padding: 16px 20px;
+    background: var(--bg-soft);
+  }
+
+  .legend-num {
+    color: var(--accent);
+    font-size: 11px;
+    letter-spacing: 2px;
+    margin-bottom: 6px;
+  }
+
+  .legend-title {
+    color: var(--text);
+    font-size: 16px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-bottom: 8px;
+  }
+
+  .legend-text {
+    color: var(--text-soft);
+    font-size: 12px;
+    line-height: 1.6;
+  }
+
+  /* Scenarios section */
+  .scenarios-section {
+    margin-top: 80px;
+    padding-top: 40px;
+    border-top: 1px solid var(--line);
+  }
+
+  .section-title {
+    text-align: center;
+    color: var(--accent);
+    font-size: 18px;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    margin-bottom: 40px;
+  }
+
+  .scenarios-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
+    gap: 16px;
+  }
+
+  .scenario {
+    border: 1px solid var(--text);
+    padding: 16px;
+    background: var(--bg-soft);
+  }
+
+  .scenario-num {
+    color: var(--accent);
+    font-size: 32px;
+    font-weight: 100;
+    line-height: 1;
+    margin-bottom: 8px;
+  }
+
+  .scenario-name {
+    color: var(--text);
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 10px;
+    min-height: 36px;
+  }
+
+  .scenario-desc {
+    color: var(--text-soft);
+    font-size: 11px;
+    line-height: 1.6;
+  }
+
+  /* Action layers section */
+  .actions-section {
+    margin-top: 80px;
+    padding-top: 40px;
+    border-top: 1px solid var(--line);
+  }
+
+  .actions-rings {
+    display: flex;
+    justify-content: center;
+    margin-top: 40px;
+  }
+
+  .ring {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid var(--accent);
+    background: var(--bg);
+    border-radius: 50%;
+    position: absolute;
+  }
+
+  .actions-container {
+    position: relative;
+    width: 600px;
+    height: 600px;
+  }
+
+  .action-circle {
+    position: absolute;
+    border: 2px solid var(--accent);
+    background: var(--bg);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+  }
+
+  .ac-1 {
+    width: 600px;
+    height: 600px;
+    top: 0;
+    left: 0;
+  }
+
+  .ac-2 {
+    width: 460px;
+    height: 460px;
+    top: 70px;
+    left: 70px;
+    background: rgba(20, 20, 20, 0.95);
+  }
+
+  .ac-3 {
+    width: 320px;
+    height: 320px;
+    top: 140px;
+    left: 140px;
+    background: rgba(20, 20, 20, 1);
+  }
+
+  .ac-4 {
+    width: 180px;
+    height: 180px;
+    top: 210px;
+    left: 210px;
+    background: var(--accent);
+  }
+
+  .ac-label {
+    color: var(--text);
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    background: var(--bg);
+    padding: 6px 14px;
+    border: 1px solid var(--accent);
+  }
+
+  .ac-4 .ac-label {
+    color: var(--bg);
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+
+  .ac-text {
+    color: var(--text-soft);
+    font-size: 10px;
+    font-style: italic;
+    margin-top: 6px;
+    text-align: center;
+    padding: 0 20px;
+  }
+
+  .ac-4 .ac-text {
+    color: var(--bg);
+  }
+
+  footer {
+    margin-top: 80px;
+    padding-top: 30px;
+    border-top: 1px solid var(--line);
+    text-align: center;
+    color: var(--text-soft);
+    font-size: 11px;
+    letter-spacing: 1px;
+  }
+
+  @media print {
+    body { padding: 20px; }
+    svg.main-diagram { width: 600px; height: 600px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+<header>
+  <h1>Что нас ждёт</h1>
+  <div class="subtitle">Очерк о будущем в свете Датаизма</div>
+  <div class="formula">«Будущее не есть то, что произойдёт. Будущее есть то, что мы спроектируем.»</div>
+</header>
+
+<!-- ОСНОВНАЯ ДИАГРАММА: КОНЦЕНТРИЧЕСКИЕ КРУГИ -->
+<div class="diagram-wrapper">
+  <svg class="main-diagram" viewBox="0 0 900 900">
+    <defs>
+      <radialGradient id="centerGlow" cx="50%" cy="50%">
+        <stop offset="0%" stop-color="#39ff14" stop-opacity="0.4"/>
+        <stop offset="100%" stop-color="#39ff14" stop-opacity="0"/>
+      </radialGradient>
+      <marker id="arrowhead-fc" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+        <polygon points="0 0, 10 3, 0 6" fill="#39ff14"/>
+      </marker>
+    </defs>
+
+    <!-- Glow at center -->
+    <circle cx="450" cy="450" r="200" fill="url(#centerGlow)"/>
+
+    <!-- OUTER CIRCLE: ДЛЯ ПОНИМАНИЯ МИРА -->
+    <circle cx="450" cy="450" r="420" fill="none" stroke="#39ff14" stroke-width="1.5" stroke-dasharray="4,4"/>
+    <circle cx="450" cy="450" r="420" fill="none" stroke="#39ff14" stroke-width="0.5"/>
+    <text x="450" y="40" text-anchor="middle" fill="#39ff14" font-size="16" letter-spacing="3" font-weight="600">МИР</text>
+    <text x="450" y="58" text-anchor="middle" fill="#ededed" font-size="11" font-style="italic">для понимания мира</text>
+
+    <!-- MIDDLE CIRCLE: ОБЩЕСТВО -->
+    <circle cx="450" cy="450" r="290" fill="rgba(20,20,20,0.6)" stroke="#39ff14" stroke-width="1.5"/>
+    <text x="450" y="170" text-anchor="middle" fill="#39ff14" font-size="14" letter-spacing="3" font-weight="600">ОБЩЕСТВО</text>
+    <text x="450" y="186" text-anchor="middle" fill="#ededed" font-size="10" font-style="italic">для экономики и общества</text>
+
+    <!-- INNER CIRCLE: Я -->
+    <circle cx="450" cy="450" r="160" fill="#141414" stroke="#39ff14" stroke-width="2"/>
+    <text x="450" y="445" text-anchor="middle" fill="#39ff14" font-size="22" letter-spacing="4" font-weight="600">Я</text>
+    <text x="450" y="465" text-anchor="middle" fill="#ededed" font-size="11" font-style="italic">для самих себя</text>
+
+    <!-- Connection lines from center outward -->
+    <g stroke="#1a8a08" stroke-width="1" stroke-dasharray="3,4">
+      <line x1="450" y1="290" x2="450" y2="160" marker-end="url(#arrowhead-fc)"/>
+      <line x1="450" y1="610" x2="450" y2="740" marker-end="url(#arrowhead-fc)"/>
+      <line x1="290" y1="450" x2="160" y2="450" marker-end="url(#arrowhead-fc)"/>
+      <line x1="610" y1="450" x2="740" y2="450" marker-end="url(#arrowhead-fc)"/>
+    </g>
+
+    <!-- WORLD: Top side labels -->
+    <g fill="#ededed" font-size="11" text-anchor="middle">
+      <text x="450" y="100">Поток данных становится буквальным</text>
+      <text x="450" y="118" font-style="italic" fill="#888">Три границы становятся видимыми</text>
+    </g>
+
+    <!-- WORLD: Bottom side labels -->
+    <g fill="#ededed" font-size="11" text-anchor="middle">
+      <text x="450" y="800">Информационная экология как фундамент</text>
+      <text x="450" y="818" font-style="italic" fill="#888">Биология как информатика</text>
+    </g>
+
+    <!-- WORLD: Right side -->
+    <g fill="#ededed" font-size="11" text-anchor="middle">
+      <text x="780" y="450">Вычислительная физика</text>
+      <text x="780" y="468" font-style="italic" fill="#888">Реальность метавселенной</text>
+    </g>
+
+    <!-- WORLD: Left side -->
+    <g fill="#ededed" font-size="11" text-anchor="middle">
+      <text x="120" y="450">Новая наука: данные первичны</text>
+      <text x="120" y="468" font-style="italic" fill="#888">Граница модели = граница знания</text>
+    </g>
+
+    <!-- SOCIETY layer labels -->
+    <g fill="#ededed" font-size="10">
+      <text x="450" y="230" text-anchor="middle">Экономика внимания</text>
+      <text x="450" y="246" text-anchor="middle" font-style="italic" fill="#888">Власть как контроль над метаданными</text>
+
+      <text x="450" y="670" text-anchor="middle">Алгоритмическое управление</text>
+      <text x="450" y="686" text-anchor="middle" font-style="italic" fill="#888">Образование, медицина, правосудие</text>
+
+      <text x="220" y="455" text-anchor="middle">Новая стратификация</text>
+      <text x="680" y="455" text-anchor="middle">Геополитика данных</text>
+    </g>
+
+    <!-- SELF inner labels -->
+    <g fill="#ededed" font-size="9">
+      <text x="450" y="390" text-anchor="middle">Этика внимания</text>
+      <text x="450" y="510" text-anchor="middle">Новая идентичность</text>
+      <text x="370" y="445" text-anchor="middle">persona+time</text>
+      <text x="530" y="445" text-anchor="middle">самость</text>
+    </g>
+
+    <!-- Corner labels: 3 boundaries -->
+    <g font-size="11" letter-spacing="1.5">
+      <text x="80" y="100" fill="#39ff14" font-weight="600">ГРАНИЦА ДАННЫХ</text>
+      <text x="80" y="118" fill="#888" font-style="italic">→ мир субъекта</text>
+
+      <text x="720" y="100" fill="#39ff14" font-weight="600">ГРАНИЦА МОДЕЛИ</text>
+      <text x="720" y="118" fill="#888" font-style="italic">→ знание</text>
+
+      <text x="80" y="820" fill="#39ff14" font-weight="600">ГРАНИЦА ВНИМАНИЯ</text>
+      <text x="80" y="838" fill="#888" font-style="italic">→ свобода</text>
+
+      <text x="720" y="820" fill="#888" font-style="italic">за пределом —</text>
+      <text x="720" y="838" fill="#39ff14" font-weight="600">молчание</text>
+    </g>
+  </svg>
+</div>
+
+<!-- LEGEND: трёхуровневая структура -->
+<div class="legend">
+  <div class="legend-item">
+    <div class="legend-num">I — ВНЕШНИЙ КРУГ</div>
+    <div class="legend-title">Мир</div>
+    <div class="legend-text">Что нам Датаизм говорит о реальности, в которой мы живём. Поток данных становится буквальным; три границы становятся видимыми; биология становится информатикой; реальность метавселенной размывает границу физического/цифрового.</div>
+  </div>
+
+  <div class="legend-item">
+    <div class="legend-num">II — СРЕДНИЙ КРУГ</div>
+    <div class="legend-title">Общество</div>
+    <div class="legend-text">Какие сдвиги в производстве, власти, праве, образовании, медицине, политике. Экономика внимания, власть как контроль над метаданными, новая стратификация по доступу к данным, алгоритмическое управление.</div>
+  </div>
+
+  <div class="legend-item">
+    <div class="legend-num">III — ЦЕНТР</div>
+    <div class="legend-title">Я</div>
+    <div class="legend-text">Как меняется этика, идентичность, смерть, рост, духовная жизнь. Этика внимания. Новая идентичность (persona + time). Новая смертность (цикл, не тело). Новая духовность (молчание у границы).</div>
+  </div>
+</div>
+
+<!-- СЦЕНАРИИ БУДУЩЕГО -->
+<div class="scenarios-section">
+  <div class="section-title">Пять сценариев будущего</div>
+  <div class="scenarios-grid">
+    <div class="scenario">
+      <div class="scenario-num">I</div>
+      <div class="scenario-name">Алгоритмическая монополия</div>
+      <div class="scenario-desc">Несколько платформ концентрируют контроль над метаданными мира. Цифровой феодализм.</div>
+    </div>
+
+    <div class="scenario">
+      <div class="scenario-num">II</div>
+      <div class="scenario-name">Распределённая суверенность</div>
+      <div class="scenario-desc">Открытые стандарты, право на портативность данных, демократический контроль над алгоритмами.</div>
+    </div>
+
+    <div class="scenario">
+      <div class="scenario-num">III</div>
+      <div class="scenario-name">Гибридная цивилизация</div>
+      <div class="scenario-desc">Человеческий и искусственный интеллект — тесная симбиотическая система. Зрелый симбиоз.</div>
+    </div>
+
+    <div class="scenario">
+      <div class="scenario-num">IV</div>
+      <div class="scenario-name">Передача эстафеты</div>
+      <div class="scenario-desc">ИИ берёт на себя основные функции цивилизации. Технологическая сингулярность.</div>
+    </div>
+
+    <div class="scenario">
+      <div class="scenario-num">V</div>
+      <div class="scenario-name">Диверсифицированное человечество</div>
+      <div class="scenario-desc">Разные сообщества выбирают разные траектории. Множественность путей.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ЧЕТЫРЕ УРОВНЯ ДЕЙСТВИЯ -->
+<div class="actions-section">
+  <div class="section-title">Что делать — четыре уровня действия</div>
+
+  <div class="actions-rings">
+    <div class="actions-container">
+      <div class="action-circle ac-1">
+        <div class="ac-label">Цивилизация</div>
+        <div class="ac-text" style="margin-top: 14px;">Договориться о ценностях AGI · сохранить разнообразие путей · защитить биосферу · подготовиться к новым субъектам · сохранить пространство для молчания</div>
+      </div>
+      <div class="action-circle ac-2">
+        <div class="ac-label">Государство</div>
+        <div class="ac-text" style="margin-top: 12px;">Защитить достоверность · приватность · алгоритмическую прозрачность · разнообразие платформ · реформировать образование</div>
+      </div>
+      <div class="action-circle ac-3">
+        <div class="ac-label">Организация</div>
+        <div class="ac-text" style="margin-top: 12px;">Управлять потоками данных и моделей · защитить достоверность · развивать внимание сотрудников · прозрачность ИИ</div>
+      </div>
+      <div class="action-circle ac-4">
+        <div class="ac-label">Индивид</div>
+        <div class="ac-text" style="margin-top: 10px;">Защищать своё внимание · строить собственную модель мира · сохранять разнообразие источников</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer style="margin-top: 100px;">
+  ЭССЕ О БУДУЩЕМ В СВЕТЕ ДАТАИЗМА · Май 2026
+</footer>
+
+</div>
+</body>
+</html>

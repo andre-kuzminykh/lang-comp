@@ -1,0 +1,1104 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Исторический таймлайн Датаизма</title>
+<style>
+  :root {
+    --bg: #0a0a0a;
+    --bg-soft: #141414;
+    --line: #2a2a2a;
+    --text: #ededed;
+    --text-soft: #888;
+    --accent: #39ff14;
+    --accent-dim: #1a8a08;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Iowan Old Style', 'Palatino', Georgia, serif;
+    font-size: 14px;
+    line-height: 1.5;
+    padding: 50px 0;
+  }
+
+  .container {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 40px;
+  }
+
+  header {
+    text-align: center;
+    margin-bottom: 80px;
+    padding-bottom: 30px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  h1 {
+    font-size: 32px;
+    font-weight: 300;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+
+  .subtitle {
+    color: var(--text-soft);
+    font-size: 14px;
+    letter-spacing: 1px;
+    font-style: italic;
+  }
+
+  .lead {
+    margin-top: 24px;
+    color: var(--accent);
+    font-size: 14px;
+    font-style: italic;
+    max-width: 600px;
+    margin-left: auto;
+    margin-right: auto;
+    line-height: 1.6;
+  }
+
+  /* Era header */
+  .era {
+    margin-bottom: 60px;
+  }
+
+  .era-header {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    margin-bottom: 40px;
+    padding: 20px 0;
+    border-top: 2px solid var(--accent);
+    border-bottom: 1px solid var(--line);
+  }
+
+  .era-number {
+    color: var(--accent);
+    font-size: 64px;
+    font-weight: 100;
+    line-height: 1;
+    width: 100px;
+    text-align: center;
+  }
+
+  .era-info {
+    flex: 1;
+  }
+
+  .era-name {
+    font-size: 22px;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    margin-bottom: 6px;
+  }
+
+  .era-dates {
+    color: var(--text-soft);
+    font-size: 13px;
+    font-style: italic;
+    letter-spacing: 1px;
+  }
+
+  .era-summary {
+    color: var(--text);
+    font-size: 13px;
+    margin-top: 8px;
+    max-width: 700px;
+    font-style: italic;
+  }
+
+  /* Timeline structure */
+  .timeline {
+    position: relative;
+    padding-left: 60px;
+  }
+
+  .timeline::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--accent);
+  }
+
+  .entry {
+    position: relative;
+    margin-bottom: 30px;
+    padding-left: 30px;
+  }
+
+  .entry::before {
+    content: '';
+    position: absolute;
+    left: -68px;
+    top: 14px;
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--accent);
+    border-radius: 50%;
+    background: var(--bg);
+  }
+
+  .entry::after {
+    content: '';
+    position: absolute;
+    left: -52px;
+    top: 21px;
+    width: 22px;
+    height: 2px;
+    background: var(--accent);
+  }
+
+  .entry-date {
+    color: var(--accent);
+    font-size: 13px;
+    letter-spacing: 2px;
+    margin-bottom: 4px;
+    font-weight: 600;
+  }
+
+  .entry-name {
+    font-size: 16px;
+    color: var(--text);
+    margin-bottom: 6px;
+  }
+
+  .entry-name span.life {
+    color: var(--text-soft);
+    font-size: 12px;
+    font-style: italic;
+    margin-left: 6px;
+  }
+
+  .entry-thesis {
+    color: var(--text);
+    font-size: 12px;
+    line-height: 1.6;
+    margin-bottom: 6px;
+  }
+
+  .entry-thesis em {
+    color: var(--accent);
+    font-style: normal;
+    font-weight: 600;
+  }
+
+  .entry-work {
+    color: var(--text-soft);
+    font-size: 11px;
+    font-style: italic;
+    letter-spacing: 0.3px;
+  }
+
+  /* Major entries (highlighted) */
+  .entry.major::before {
+    background: var(--accent);
+    box-shadow: 0 0 12px var(--accent);
+  }
+
+  .entry.major .entry-name {
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  /* Tradition entries (east) */
+  .entry.east::before {
+    border-color: var(--text);
+  }
+
+  .entry.east::after {
+    background: var(--text);
+  }
+
+  .entry.east .entry-date {
+    color: var(--text);
+  }
+
+  /* Russian entries */
+  .entry.russian .entry-name {
+    color: var(--text);
+  }
+
+  /* Final stretch */
+  .final-stretch {
+    margin-top: 80px;
+    padding: 40px;
+    border: 2px solid var(--accent);
+    background: var(--bg-soft);
+    text-align: center;
+  }
+
+  .final-title {
+    color: var(--accent);
+    font-size: 18px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin-bottom: 20px;
+  }
+
+  .final-text {
+    color: var(--text);
+    font-size: 14px;
+    font-style: italic;
+    line-height: 1.7;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  footer {
+    margin-top: 80px;
+    padding-top: 30px;
+    border-top: 1px solid var(--line);
+    text-align: center;
+    color: var(--text-soft);
+    font-size: 11px;
+    letter-spacing: 1px;
+  }
+
+  @media print {
+    body { padding: 20px 0; }
+    .era { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+<header>
+  <h1>Историческая справка к Датаизму</h1>
+  <div class="subtitle">Путь идеи: от Античности до 2026 года</div>
+  <div class="lead">«Идея, что мир есть информация, не нова. Нова форма её выражения и техническая реализация.»</div>
+</header>
+
+<!-- ЭПОХА 1: АНТИЧНОСТЬ -->
+<div class="era">
+  <div class="era-header">
+    <div class="era-number">I</div>
+    <div class="era-info">
+      <div class="era-name">Античные истоки</div>
+      <div class="era-dates">≈ 600 до н.э. — 300 н.э.</div>
+      <div class="era-summary">За многообразием явлений — структура.</div>
+    </div>
+  </div>
+
+  <div class="timeline">
+    <div class="entry major">
+      <div class="entry-date">≈ 570—495 ДО Н.Э.</div>
+      <div class="entry-name">Пифагор Самосский <span class="life">(VI в. до н.э.)</span></div>
+      <div class="entry-thesis"><em>«Всё есть число.»</em> Первая структурная онтология. Музыкальные созвучия как простые числовые отношения → онтологический вывод о математической природе реальности.</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">≈ 515—450 ДО Н.Э.</div>
+      <div class="entry-name">Парменид Элейский <span class="life">(VI—V в. до н.э.)</span></div>
+      <div class="entry-thesis"><em>«Бытие есть, небытия нет.»</em> Граница языка совпадает с границей мира — древнейшая формулировка принципа Датаизма.</div>
+      <div class="entry-work">«О природе»</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">≈ 535—475 ДО Н.Э.</div>
+      <div class="entry-name">Гераклит Эфесский <span class="life">(VI—V в. до н.э.)</span></div>
+      <div class="entry-thesis"><em>«Всё течёт.»</em> Реальность как поток. Логос как закон, управляющий потоком — алгоритмическая онтология.</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">≈ 460—370 ДО Н.Э.</div>
+      <div class="entry-name">Демокрит Абдерский <span class="life">(V—IV в. до н.э.)</span></div>
+      <div class="entry-thesis"><em>Атомизм.</em> Атомы характеризуются формой, положением, порядком — атом сводится к данным о нём.</div>
+    </div>
+
+    <div class="entry major">
+      <div class="entry-date">≈ 427—347 ДО Н.Э.</div>
+      <div class="entry-name">Платон <span class="life">(V—IV в. до н.э.)</span></div>
+      <div class="entry-thesis"><em>Учение об идеях.</em> Видимый мир — несовершенная копия мира идей. Идея как форма, спецификация, структура. Первая формулировка субстратной независимости.</div>
+      <div class="entry-work">«Государство», «Тимей», «Парменид», «Софист»</div>
+    </div>
+
+    <div class="entry major">
+      <div class="entry-date">384—322 ДО Н.Э.</div>
+      <div class="entry-name">Аристотель <span class="life">(IV в. до н.э.)</span></div>
+      <div class="entry-thesis"><em>Форма в материи.</em> Четыре причины (материальная / формальная / действующая / целевая) ≈ носитель / структура / алгоритм / функция оптимизации.</div>
+      <div class="entry-work">«Метафизика», «Физика», «О душе»</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">III В. ДО Н.Э. — II В. Н.Э.</div>
+      <div class="entry-name">Стоики <span class="life">(Зенон, Хрисипп, Эпиктет, Марк Аврелий)</span></div>
+      <div class="entry-thesis"><em>Логос как мировой разум.</em> «ἐφ' ἡμῖν» — в нашей власти только суждения и направление внимания. Прямая стоическая формулировка датаистского принципа свободы.</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">≈ 204—270 Н.Э.</div>
+      <div class="entry-name">Плотин <span class="life">(III в.)</span></div>
+      <div class="entry-thesis"><em>Единое и эманации.</em> Иерархия Единое → Ум → Душа → Материя как иерархия информационных уровней. Апофатическая теология — предтеча предела датаистского описания.</div>
+      <div class="entry-work">«Эннеады»</div>
+    </div>
+  </div>
+</div>
+
+<!-- ЭПОХА 2: ВОСТОЧНАЯ ТРАДИЦИЯ -->
+<div class="era">
+  <div class="era-header">
+    <div class="era-number">II</div>
+    <div class="era-info">
+      <div class="era-name">Восточная традиция (параллельно)</div>
+      <div class="era-dates">≈ XI в. до н.э. — V в. н.э.</div>
+      <div class="era-summary">Реальность как поток различений и отношений.</div>
+    </div>
+  </div>
+
+  <div class="timeline">
+    <div class="entry east">
+      <div class="entry-date">≈ XI В. ДО Н.Э.</div>
+      <div class="entry-name">И-Цзин (Книга Перемен)</div>
+      <div class="entry-thesis"><em>64 гексаграммы.</em> Древнейшая известная форма двоичного представления реальности (ян/инь × 6 позиций = 2⁶). Лейбниц был поражён сходством со своей двоичной системой.</div>
+    </div>
+
+    <div class="entry east">
+      <div class="entry-date">≈ VI В. ДО Н.Э.</div>
+      <div class="entry-name">Лао-цзы</div>
+      <div class="entry-thesis"><em>«Дао дэ цзин».</em> Невыразимое Дао → единое → два → три → десять тысяч вещей. Онтология последовательной дифференциации информации.</div>
+    </div>
+
+    <div class="entry east">
+      <div class="entry-date">≈ 563—483 ДО Н.Э.</div>
+      <div class="entry-name">Будда Шакьямуни</div>
+      <div class="entry-thesis"><em>Анатман.</em> Нет постоянной самости — есть поток дхарм. «Я» как узор в потоке данных — прямая параллель датаистскому определению субъекта.</div>
+    </div>
+
+    <div class="entry east">
+      <div class="entry-date">≈ II В. Н.Э.</div>
+      <div class="entry-name">Нагарджуна</div>
+      <div class="entry-thesis"><em>Мадхьямака. Учение о пустоте (шуньяте).</em> Реальны только отношения; «вещи» — устойчивые конфигурации отношений. Глубокая параллель Датаизму.</div>
+    </div>
+
+    <div class="entry east">
+      <div class="entry-date">IV—V В. Н.Э.</div>
+      <div class="entry-name">Йогачара (Асанга, Васубандху)</div>
+      <div class="entry-thesis">Мир есть только сознание (читтаматра). Идеалистическая онтология информации.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ЭПОХА 3: СРЕДНЕВЕКОВЬЕ -->
+<div class="era">
+  <div class="era-header">
+    <div class="era-number">III</div>
+    <div class="era-info">
+      <div class="era-name">Средневековье</div>
+      <div class="era-dates">≈ 400 — 1500</div>
+      <div class="era-summary">Спор об универсалиях, бритва экономии, мечта о механизации мышления.</div>
+    </div>
+  </div>
+
+  <div class="timeline">
+    <div class="entry">
+      <div class="entry-date">354—430</div>
+      <div class="entry-name">Августин Гиппонский</div>
+      <div class="entry-thesis"><em>«В начале было Слово.»</em> Творение как акт коммуникации. Прошлое и будущее существуют только как репрезентации в душе.</div>
+      <div class="entry-work">«Исповедь», «О граде Божием»</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">≈ 480—524</div>
+      <div class="entry-name">Боэций</div>
+      <div class="entry-thesis">Три вида музыки (mundana / humana / instrumentalis) — три уровня информационной структуры.</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">XI—XIV ВВ.</div>
+      <div class="entry-name">Спор об универсалиях</div>
+      <div class="entry-thesis">Реализм (Ансельм) против номинализма (Росцелин, Оккам) — древняя версия современного спора об объективности структур данных.</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">1232—1316</div>
+      <div class="entry-name">Раймунд Луллий</div>
+      <div class="entry-thesis"><em>Ars Magna.</em> Комбинаторика понятий через вращающиеся диски — первая систематическая попытка механизировать мышление.</div>
+    </div>
+
+    <div class="entry major">
+      <div class="entry-date">≈ 1287—1347</div>
+      <div class="entry-name">Уильям Оккам</div>
+      <div class="entry-thesis"><em>«Не следует умножать сущности без необходимости.»</em> Бритва Оккама — фундаментальный методологический принцип Датаизма.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ЭПОХА 4: НОВОЕ ВРЕМЯ -->
+<div class="era">
+  <div class="era-header">
+    <div class="era-number">IV</div>
+    <div class="era-info">
+      <div class="era-name">Новое время</div>
+      <div class="era-dates">1500 — 1800</div>
+      <div class="era-summary">Математизация природы. Мечта об исчислении мысли.</div>
+    </div>
+  </div>
+
+  <div class="timeline">
+    <div class="entry">
+      <div class="entry-date">1564—1642</div>
+      <div class="entry-name">Галилео Галилей</div>
+      <div class="entry-thesis"><em>«Книга природы написана на языке математики.»</em> Природа как текст, поддающийся точному количественному описанию.</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">1596—1650</div>
+      <div class="entry-name">Рене Декарт</div>
+      <div class="entry-thesis"><em>«Cogito, ergo sum.»</em> Мечта о mathesis universalis — универсальной математике для всех проблем.</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">1632—1677</div>
+      <div class="entry-name">Барух Спиноза</div>
+      <div class="entry-thesis"><em>Единая субстанция.</em> Мышление и протяжённость — два атрибута одной субстанции. Параллелизм атрибутов = два аспекта одного информационного процесса.</div>
+      <div class="entry-work">«Этика»</div>
+    </div>
+
+    <div class="entry major">
+      <div class="entry-date">1646—1716</div>
+      <div class="entry-name">Готфрид Лейбниц <span class="life">— «первый Датаист»</span></div>
+      <div class="entry-thesis"><em>Монадология + двоичная система + characteristica universalis.</em> «Omnibus ex nihilo ducendis sufficit unum» — предсказание «It from Bit» за три столетия до Уилера. Принцип тождества неразличимых.</div>
+      <div class="entry-work">«Монадология», «Новые опыты»</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">1632—1704</div>
+      <div class="entry-name">Джон Локк</div>
+      <div class="entry-thesis"><em>Tabula rasa.</em> Разум — чистая доска; все знания из опыта. Прообраз современной модели обучения нейронных сетей.</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">1685—1753</div>
+      <div class="entry-name">Джордж Беркли</div>
+      <div class="entry-thesis"><em>«Esse est percipi.»</em> Существовать — значит быть воспринимаемым. Реальность как данные восприятия.</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">1711—1776</div>
+      <div class="entry-name">Дэвид Юм</div>
+      <div class="entry-thesis"><em>Причинность как привычка.</em> Причинность — статистическая регулярность в данных. «Я» как пучок восприятий.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ЭПОХА 5: НЕМЕЦКАЯ КЛАССИКА -->
+<div class="era">
+  <div class="era-header">
+    <div class="era-number">V</div>
+    <div class="era-info">
+      <div class="era-name">Немецкая классика</div>
+      <div class="era-dates">1780 — 1880</div>
+      <div class="era-summary">Познание как активная конструкция. Диалектика моделей.</div>
+    </div>
+  </div>
+
+  <div class="timeline">
+    <div class="entry major">
+      <div class="entry-date">1724—1804</div>
+      <div class="entry-name">Иммануил Кант</div>
+      <div class="entry-thesis"><em>Формы созерцания и категории рассудка.</em> Познание = активная конструкция через априорные формы. В современных терминах — архитектура нейронной сети до обучения.</div>
+      <div class="entry-work">«Критика чистого разума»</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">1770—1831</div>
+      <div class="entry-name">Г. В. Ф. Гегель</div>
+      <div class="entry-thesis"><em>Диалектика.</em> Дух познаёт себя через тезис-антитезис-синтез. Близко к процессам обновления модели в нейронных сетях.</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">1788—1860</div>
+      <div class="entry-name">Артур Шопенгауэр</div>
+      <div class="entry-thesis"><em>Воля и представление.</em> За представлениями — слепая Воля. Предвосхищение динамики данных и функции ценности.</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">1818—1883</div>
+      <div class="entry-name">Карл Маркс</div>
+      <div class="entry-thesis"><em>Материализм.</em> Способ производства определяет сознание. Эпоха ИИ = продолжение Маркса: производительная сила = обработка информации.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ЭПОХА 6: ЛОГИКА И ОСНОВАНИЯ -->
+<div class="era">
+  <div class="era-header">
+    <div class="era-number">VI</div>
+    <div class="era-info">
+      <div class="era-name">Логика и основания</div>
+      <div class="era-dates">1850 — 1950</div>
+      <div class="era-summary">Формализация мысли. Открытие пределов формализации.</div>
+    </div>
+  </div>
+
+  <div class="timeline">
+    <div class="entry">
+      <div class="entry-date">1815—1864</div>
+      <div class="entry-name">Джордж Буль</div>
+      <div class="entry-thesis"><em>Алгебра логики.</em> «Законы мысли» как математические правила. Фундамент цифровой электроники.</div>
+      <div class="entry-work">«An Investigation of the Laws of Thought» (1854)</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">1848—1925</div>
+      <div class="entry-name">Готлоб Фреге</div>
+      <div class="entry-thesis"><em>Begriffsschrift.</em> Современная символьная логика. Смысл (Sinn) vs значение (Bedeutung) — фундамент семантики.</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">1845—1918</div>
+      <div class="entry-name">Георг Кантор</div>
+      <div class="entry-thesis"><em>Иерархия бесконечностей.</em> ℵ₀ &lt; ℵ₁ &lt; ℵ₂ ... Пространство возможных конфигураций данных бесконечно во многих степенях.</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">1872—1970</div>
+      <div class="entry-name">Бертран Рассел</div>
+      <div class="entry-thesis"><em>Парадокс Рассела.</em> Множество всех множеств, не содержащих себя. Принципиальный предел формализации.</div>
+      <div class="entry-work">«Principia Mathematica» (с Уайтхедом)</div>
+    </div>
+
+    <div class="entry major">
+      <div class="entry-date">1906—1978</div>
+      <div class="entry-name">Курт Гёдель</div>
+      <div class="entry-thesis"><em>Теоремы о неполноте.</em> Всякая достаточно богатая формальная система либо противоречива, либо неполна. Фундаментальный предел операциональной обработки данных.</div>
+      <div class="entry-work">«Über formal unentscheidbare Sätze» (1931)</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">1862—1943</div>
+      <div class="entry-name">Давид Гильберт</div>
+      <div class="entry-thesis"><em>Программа формализации.</em> «Wir müssen wissen — wir werden wissen». Разрушена Гёделем, но дала импульс теории доказательств.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ЭПОХА 7: ВИТГЕНШТЕЙН -->
+<div class="era">
+  <div class="era-header">
+    <div class="era-number">VII</div>
+    <div class="era-info">
+      <div class="era-name">Витгенштейн</div>
+      <div class="era-dates">1889 — 1951</div>
+      <div class="era-summary">Граница языка совпадает с границей мира.</div>
+    </div>
+  </div>
+
+  <div class="timeline">
+    <div class="entry major">
+      <div class="entry-date">1921</div>
+      <div class="entry-name">Ранний Витгенштейн</div>
+      <div class="entry-thesis"><em>«Логико-философский трактат».</em> 7 главных тезисов. «О чём невозможно говорить, о том следует молчать». Прямой предок формы «Логико-Информационного Трактата».</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">1953 (ПОСМЕРТНО)</div>
+      <div class="entry-name">Поздний Витгенштейн</div>
+      <div class="entry-thesis"><em>«Философские исследования».</em> Значение слова = его употребление в языке. Языковые игры. Семейное сходство.</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">1939</div>
+      <div class="entry-name">Спор Витгенштейн—Тьюринг</div>
+      <div class="entry-thesis">Кембриджские лекции. Конструктивизм (Витгенштейн) vs платонизм (Тьюринг) о математической истине.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ЭПОХА 8: КИБЕРНЕТИКА И ИНФОРМАЦИЯ -->
+<div class="era">
+  <div class="era-header">
+    <div class="era-number">VIII</div>
+    <div class="era-info">
+      <div class="era-name">Кибернетика и теория информации</div>
+      <div class="era-dates">1930 — 1980</div>
+      <div class="era-summary">Информация становится точным научным понятием.</div>
+    </div>
+  </div>
+
+  <div class="timeline">
+    <div class="entry major">
+      <div class="entry-date">1912—1954</div>
+      <div class="entry-name">Алан Тьюринг</div>
+      <div class="entry-thesis"><em>Тьюрингова машина (1936).</em> Формализация вычислимости. Универсальная машина. Невычислимость (проблема остановки). Тест Тьюринга (1950).</div>
+    </div>
+
+    <div class="entry major">
+      <div class="entry-date">1916—2001</div>
+      <div class="entry-name">Клод Шеннон</div>
+      <div class="entry-thesis"><em>«A Mathematical Theory of Communication» (1948).</em> Информация как уменьшение неопределённости. Бит. Энтропия. Пропускная способность.</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">1894—1964</div>
+      <div class="entry-name">Норберт Винер</div>
+      <div class="entry-thesis"><em>Кибернетика (1948).</em> Управление и связь в живых организмах, машинах, обществе. Универсальный язык информации.</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">1943</div>
+      <div class="entry-name">Маккаллок и Питтс</div>
+      <div class="entry-thesis"><em>Нейроны как логические элементы.</em> Идеализированный нейрон = булев пороговый элемент. Прародители нейронных сетей.</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">1903—1957</div>
+      <div class="entry-name">Джон фон Нейман</div>
+      <div class="entry-thesis"><em>Архитектура фон Неймана.</em> Программа и данные в общей памяти. Самовоспроизводящиеся автоматы. Процесс 1 vs процесс 2 в КМ.</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">1969</div>
+      <div class="entry-name">Конрад Цузе</div>
+      <div class="entry-thesis"><em>«Rechnender Raum».</em> Вселенная как гигантский клеточный автомат. Первая цифровая физика.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ЭПОХА 9: ФИЗИКА ИНФОРМАЦИИ -->
+<div class="era">
+  <div class="era-header">
+    <div class="era-number">IX</div>
+    <div class="era-info">
+      <div class="era-name">Физика информации</div>
+      <div class="era-dates">1944 — 2026</div>
+      <div class="era-summary">Информация в основании самой физики.</div>
+    </div>
+  </div>
+
+  <div class="timeline">
+    <div class="entry">
+      <div class="entry-date">1887—1961</div>
+      <div class="entry-name">Эрвин Шрёдингер</div>
+      <div class="entry-thesis"><em>«What Is Life?» (1944).</em> Жизнь питается негэнтропией. Наследственность — код-скрипт. Предсказание ДНК.</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">1901—1976</div>
+      <div class="entry-name">Вернер Гейзенберг</div>
+      <div class="entry-thesis"><em>Принцип неопределённости (1927).</em> Физика как способ задавать вопросы и регистрировать ответы. Каждое измерение — информационное событие.</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">1885—1962</div>
+      <div class="entry-name">Нильс Бор</div>
+      <div class="entry-thesis"><em>Принцип комплементарности (1927).</em> Измерение онтологически конститутивно. Реальность не отделена от условий наблюдения.</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">1930—1982</div>
+      <div class="entry-name">Хью Эверетт</div>
+      <div class="entry-thesis"><em>Множественные миры (1957).</em> Волновая функция никогда не коллапсирует. Информация = ветвящаяся структура универсальной волновой функции.</div>
+    </div>
+
+    <div class="entry major">
+      <div class="entry-date">1911—2008</div>
+      <div class="entry-name">Джон Арчибальд Уилер</div>
+      <div class="entry-thesis"><em>«It from Bit» (1990).</em> Всё происходит из битов. Соучастная Вселенная. Делайт-эксперимент с отложенным выбором. «Закон без закона».</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">1972—1995</div>
+      <div class="entry-name">Бекенштейн и Хокинг</div>
+      <div class="entry-thesis"><em>Энтропия чёрных дыр.</em> S = kA/(4ℓ_P²). Информация как физическая величина, входящая в фундаментальные законы гравитации.</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">1993, 1995</div>
+      <div class="entry-name">'т Хоофт и Сасскинд</div>
+      <div class="entry-thesis"><em>Голографический принцип.</em> Информация трёхмерного объёма кодируется на его двумерной границе. Малдасена (1997): AdS/CFT.</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">1953—</div>
+      <div class="entry-name">Дэвид Дойч</div>
+      <div class="entry-thesis"><em>Универсальный квантовый компьютер (1985).</em> Вселенная — квантовый мультиверс. Знание = открытый творческий процесс.</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">1967—</div>
+      <div class="entry-name">Макс Тегмарк</div>
+      <div class="entry-thesis"><em>Гипотеза математической Вселенной (MUH).</em> Реальность есть математическая структура. Уровень IV мультивселенной.</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">1959—</div>
+      <div class="entry-name">Стивен Вольфрам</div>
+      <div class="entry-thesis"><em>«A New Kind of Science» (2002).</em> Простые правила порождают сложность. Wolfram Physics Project (2020): гиперграфы как ткань мира.</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">1934—2023</div>
+      <div class="entry-name">Эдвард Фредкин</div>
+      <div class="entry-thesis"><em>Цифровая философия.</em> Вселенная конечна, дискретна, детерминирована. Реверсивные вычисления.</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">1960—</div>
+      <div class="entry-name">Сет Ллойд</div>
+      <div class="entry-thesis"><em>«Programming the Universe» (2006).</em> Вселенная за 13.8 млрд лет выполнила ~10¹²⁰ операций над ~10⁹⁰ битами.</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">1956—</div>
+      <div class="entry-name">Карло Ровелли</div>
+      <div class="entry-thesis"><em>Реляционная квантовая механика.</em> Свойства существуют только в отношениях между системами. Петлевая квантовая гравитация.</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">1959—</div>
+      <div class="entry-name">Карл Фристон</div>
+      <div class="entry-thesis"><em>Принцип свободной энергии (2010).</em> Всякая саморегулирующаяся система минимизирует вариационную свободную энергию. Унифицированная теория мозга.</div>
+    </div>
+
+    <div class="entry major">
+      <div class="entry-date">2020</div>
+      <div class="entry-name">Виталий Ванчурин</div>
+      <div class="entry-thesis"><em>«The World as a Neural Network».</em> Вселенная на самом фундаментальном уровне есть нейронная сеть. Из её динамики эмерджируют и квантовая механика, и общая теория относительности.</div>
+      <div class="entry-work">arXiv:2008.01540, Entropy 22:1210</div>
+    </div>
+  </div>
+</div>
+
+<!-- ЭПОХА 10: ФИЛОСОФИЯ СОЗНАНИЯ -->
+<div class="era">
+  <div class="era-header">
+    <div class="era-number">X</div>
+    <div class="era-info">
+      <div class="era-name">Философия сознания</div>
+      <div class="era-dates">1949 — 2026</div>
+      <div class="era-summary">Сознание как режим работы информационных систем.</div>
+    </div>
+  </div>
+
+  <div class="timeline">
+    <div class="entry">
+      <div class="entry-date">1900—1976</div>
+      <div class="entry-name">Гилберт Райл</div>
+      <div class="entry-thesis"><em>«Концепция сознания» (1949).</em> Миф о духе в машине. Категориальная ошибка картезианства.</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">1926—2016</div>
+      <div class="entry-name">Хилари Патнэм</div>
+      <div class="entry-thesis"><em>Функционализм.</em> Ментальные состояния = функциональные роли. Субстратная независимость разума.</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">1942—2024</div>
+      <div class="entry-name">Дэниел Деннетт</div>
+      <div class="entry-thesis"><em>«Сознание объяснённое» (1991).</em> Теория множественных черновиков. Нет картезианского театра.</div>
+    </div>
+
+    <div class="entry major">
+      <div class="entry-date">1966—</div>
+      <div class="entry-name">Дэвид Чалмерс</div>
+      <div class="entry-thesis"><em>Трудная проблема сознания (1995).</em> Почему обработка сопровождается переживанием? Натуралистический дуализм.</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">1960—</div>
+      <div class="entry-name">Джулио Тонони</div>
+      <div class="entry-thesis"><em>Теория интегрированной информации (IIT).</em> Сознание = Φ. Математически строгая теория.</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">1965—</div>
+      <div class="entry-name">Станислас Деан</div>
+      <div class="entry-thesis"><em>Глобальное нейронное рабочее пространство.</em> Сознание как режим глобальной доступности информации.</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">1967—</div>
+      <div class="entry-name">Майкл Грациано</div>
+      <div class="entry-thesis"><em>Теория схемы внимания (AST).</em> Сознание = внутренняя модель собственного внимания мозга.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ЭПОХА 11: ТЕОРИЯ ВНИМАНИЯ -->
+<div class="era">
+  <div class="era-header">
+    <div class="era-number">XI</div>
+    <div class="era-info">
+      <div class="era-name">Теория внимания</div>
+      <div class="era-dates">1890 — 2026</div>
+      <div class="era-summary">Внимание как единственное место свободы.</div>
+    </div>
+  </div>
+
+  <div class="timeline">
+    <div class="entry major">
+      <div class="entry-date">1890</div>
+      <div class="entry-name">Уильям Джеймс</div>
+      <div class="entry-thesis"><em>«Principles of Psychology».</em> «Effort of attention is the essential phenomenon of will». Свобода воли находится во внимании.</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">1953</div>
+      <div class="entry-name">Колин Черри</div>
+      <div class="entry-thesis"><em>Проблема коктейльной вечеринки.</em> Селективное внимание в дихотическом слушании.</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">1958</div>
+      <div class="entry-name">Дональд Бродбент</div>
+      <div class="entry-thesis"><em>Теория фильтра.</em> Раннее селективное внимание. Импорт шенноновской информационной теории в психологию.</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">1960-Е</div>
+      <div class="entry-name">Энн Трейсман</div>
+      <div class="entry-thesis"><em>Теория аттенюации, теория интеграции признаков.</em> Внимание как «клей», связывающий признаки в объекты.</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">1973</div>
+      <div class="entry-name">Даниэль Канеман</div>
+      <div class="entry-thesis"><em>«Attention and Effort».</em> Внимание как ограниченный ресурс умственной энергии.</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">1990</div>
+      <div class="entry-name">Познер и Петерсен</div>
+      <div class="entry-thesis"><em>Три системы внимания:</em> бдительность, ориентирование, исполнительное управление. Нейроанатомические корреляты.</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">2014, 2017</div>
+      <div class="entry-name">Внимание в машинном обучении</div>
+      <div class="entry-thesis"><em>Бахданау (2014):</em> механизм внимания в seq2seq. <em>Vaswani (2017):</em> «Attention is All You Need» — Transformer. Основа всех современных LLM.</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">2016</div>
+      <div class="entry-name">Тим Ву</div>
+      <div class="entry-thesis"><em>«The Attention Merchants».</em> История индустрий, торгующих вниманием. Внимание как товар.</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">2017</div>
+      <div class="entry-name">Ив Ситтон</div>
+      <div class="entry-thesis"><em>«Ecology of Attention».</em> Внимание как экологический ресурс на трёх уровнях: коллективном, совместном, индивидуальном.</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">2014—2020</div>
+      <div class="entry-name">Бернард Стиглер</div>
+      <div class="entry-thesis"><em>Разрушение внимания.</em> Цифровые «психотехнологии» как пролетаризация ноэтических способностей.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ЭПОХА 12: РУССКАЯ ТРАДИЦИЯ -->
+<div class="era">
+  <div class="era-header">
+    <div class="era-number">XII</div>
+    <div class="era-info">
+      <div class="era-name">Русская традиция</div>
+      <div class="era-dates">1850 — 2026</div>
+      <div class="era-summary">Всеединство, ноосфера, диалогизм, когнитом.</div>
+    </div>
+  </div>
+
+  <div class="timeline">
+    <div class="entry russian">
+      <div class="entry-date">1853—1900</div>
+      <div class="entry-name">Владимир Соловьёв</div>
+      <div class="entry-thesis"><em>Всеединство.</em> Реальность — единый взаимосвязанный организм. «Всё в одном и одно во всём».</div>
+    </div>
+
+    <div class="entry russian">
+      <div class="entry-date">1829—1903</div>
+      <div class="entry-name">Николай Фёдоров</div>
+      <div class="entry-thesis"><em>«Философия общего дела».</em> Воскрешение отцов через науку. Самый радикальный проект тотальной датафикации истории.</div>
+    </div>
+
+    <div class="entry russian">
+      <div class="entry-date">1857—1935</div>
+      <div class="entry-name">Константин Циолковский</div>
+      <div class="entry-thesis"><em>Панпсихизм атома.</em> Лучистое человечество. Космическая этика — жизнь должна распространяться по Вселенной.</div>
+    </div>
+
+    <div class="entry russian">
+      <div class="entry-date">1897—1964</div>
+      <div class="entry-name">Александр Чижевский</div>
+      <div class="entry-thesis"><em>Гелиобиология.</em> Земное эхо солнечных бурь. Жизнь как космический информационный приёмник.</div>
+    </div>
+
+    <div class="entry russian major">
+      <div class="entry-date">1863—1945</div>
+      <div class="entry-name">Владимир Вернадский</div>
+      <div class="entry-thesis"><em>Биосфера → Ноосфера.</em> Информационная оболочка Земли. Прямой предшественник датасферы.</div>
+      <div class="entry-work">«Биосфера» (1926), «Несколько слов о ноосфере» (1944)</div>
+    </div>
+
+    <div class="entry russian">
+      <div class="entry-date">1882—1937</div>
+      <div class="entry-name">Павел Флоренский</div>
+      <div class="entry-thesis"><em>«Столп и утверждение Истины».</em> Имяславие. Пневматосфера. Антиномическая структура истины.</div>
+    </div>
+
+    <div class="entry russian">
+      <div class="entry-date">1873—1928</div>
+      <div class="entry-name">Александр Богданов</div>
+      <div class="entry-thesis"><em>Тектология.</em> Всеобщая организационная наука. Проторганизация кибернетики за 30 лет до Винера.</div>
+    </div>
+
+    <div class="entry russian">
+      <div class="entry-date">1895—1975</div>
+      <div class="entry-name">Михаил Бахтин</div>
+      <div class="entry-thesis"><em>Диалогизм.</em> Сознание изначально диалогично. Полифония. Хронотоп.</div>
+    </div>
+
+    <div class="entry russian">
+      <div class="entry-date">1893—1988</div>
+      <div class="entry-name">Алексей Лосев</div>
+      <div class="entry-thesis"><em>«Философия имени», «Диалектика мифа».</em> Имя как онтологическая сущность. Личностно-мифическая структура реальности.</div>
+    </div>
+
+    <div class="entry russian">
+      <div class="entry-date">1957—</div>
+      <div class="entry-name">Константин Анохин</div>
+      <div class="entry-thesis"><em>Теория когнитома.</em> Мозг как нейронная гиперсеть. Современная российская нейрофилософия.</div>
+    </div>
+
+    <div class="entry russian major">
+      <div class="entry-date">XXI В.</div>
+      <div class="entry-name">Игорь Пивоваров</div>
+      <div class="entry-thesis"><em>Теория эволюционирующих саморепрезентаций.</em> 11 уровней архитектуры сознания. Наиболее значительное современное русское контрибьюторство к датаистской мысли.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ЭПОХА 13: СОВРЕМЕННЫЙ ДАТАИЗМ -->
+<div class="era">
+  <div class="era-header">
+    <div class="era-number">XIII</div>
+    <div class="era-info">
+      <div class="era-name">Современный Датаизм</div>
+      <div class="era-dates">1989 — 2026</div>
+      <div class="era-summary">Формирование академического и культурного движения.</div>
+    </div>
+  </div>
+
+  <div class="timeline">
+    <div class="entry">
+      <div class="entry-date">1989</div>
+      <div class="entry-name">Том ДеУитт</div>
+      <div class="entry-thesis">«Dataism» в каталоге SIGGRAPH. Первое документированное использование термина в контексте компьютерного искусства.</div>
+    </div>
+
+    <div class="entry major">
+      <div class="entry-date">ФЕВРАЛЬ 2013</div>
+      <div class="entry-name">Дэвид Брукс</div>
+      <div class="entry-thesis"><em>«The Philosophy of Data» (NYT).</em> Первая мейнстримная журналистская формулировка датаистского мировоззрения.</div>
+    </div>
+
+    <div class="entry major">
+      <div class="entry-date">2014</div>
+      <div class="entry-name">Хосе ван Дейк</div>
+      <div class="entry-thesis"><em>«Datafication, dataism and dataveillance».</em> Первое систематическое академическое определение датаизма как идеологии.</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">2015</div>
+      <div class="entry-name">Стив Лор</div>
+      <div class="entry-thesis"><em>«Data-ism».</em> Корпоративная революция данных. Журналистский синтез.</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">2016</div>
+      <div class="entry-name">Эммерт-Стрейб и др.</div>
+      <div class="entry-thesis">«Against Dataism» — первая значимая критика внутри научного сообщества.</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">2017</div>
+      <div class="entry-name">Тед Питерс</div>
+      <div class="entry-thesis">«The Deluge of Dataism: A New Post-Human Religion?» — теологическая критика.</div>
+    </div>
+
+    <div class="entry major">
+      <div class="entry-date">2017</div>
+      <div class="entry-name">Юваль Ной Харари</div>
+      <div class="entry-thesis"><em>«Homo Deus», «Dataism Is Our New God».</em> Глобальная популяризация Датаизма как преемницы гуманизма.</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">2019—2022</div>
+      <div class="entry-name">Развитие критики</div>
+      <div class="entry-thesis">Ross, Vintar, Pedersen, Vyshnevskyi, Quico, Petri, Khauthar, Kao, Ruckenstein, Müller, Kobelieva, Lange, Ciborowski, Davies, Bulur, Devlieghere, Oliveira, Sepúlveda — расширение по дисциплинам.</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">2023</div>
+      <div class="entry-name">Larsen, Antolínez, Adamczyk, Володин, Al-Kassimi, Bekar</div>
+      <div class="entry-thesis">Расширение географическое и теоретическое: посчеловеческое будущее, Бурдьё, коммуникация, история, постколониальная критика, спиритуальность.</div>
+    </div>
+
+    <div class="entry major">
+      <div class="entry-date">2024</div>
+      <div class="entry-name">Йоханнес Хоф</div>
+      <div class="entry-thesis"><em>«The Gift of Intelligence and the Sacramentality of Real Presence».</em> Сильнейшая теологическая критика датаистской метафизики.</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">2024</div>
+      <div class="entry-name">Erdocia, Lee, Peeters, Мухаметов, Morán Roa</div>
+      <div class="entry-thesis">Язык не есть датасет; человек как информационный организм; академическая практика; государство в датаизме; Юнг-Чхуль Хан.</div>
+    </div>
+
+    <div class="entry major">
+      <div class="entry-date">2025</div>
+      <div class="entry-name">Блейз Агуэра-и-Аркас</div>
+      <div class="entry-thesis"><em>«What Is Intelligence?».</em> Жизнь как самоподдерживающаяся вычислительная фаза материи. Наиболее современный синтез.</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">2025</div>
+      <div class="entry-name">Glaser & Wong et al.</div>
+      <div class="entry-thesis">«Governing the Future» — сборник о технотронной революции. Müller (тотальный надзор), Loh (универсальный контроль), Buchan (корпоративный шпионаж).</div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-date">2026</div>
+      <div class="entry-name">Hạnh, Aguite</div>
+      <div class="entry-thesis">Историко-материалистическая критика и теология AI. Глобальное распространение датаистского дискурса.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ФИНАЛЬНОЕ -->
+<div class="final-stretch">
+  <div class="final-title">Главная формула</div>
+  <div class="final-text">
+    «Границы моей модели знания суть границы моего мира.»<br>
+    <br>
+    Граница данных есть граница доступного мира.<br>
+    Граница модели есть граница знания.<br>
+    Граница внимания есть граница свободы.<br>
+    <br>
+    За пределом — молчание.
+  </div>
+</div>
+
+<footer>
+  ИСТОРИЧЕСКАЯ СПРАВКА К ДАТАИЗМУ · Май 2026
+</footer>
+
+</div>
+</body>
+</html>
