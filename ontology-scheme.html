@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Онтология Логико-Информационного Трактата</title>
+<style>
+  :root {
+    --bg: #0a0a0a;
+    --bg-soft: #141414;
+    --line: #2a2a2a;
+    --text: #ededed;
+    --text-soft: #888;
+    --accent: #39ff14;
+    --accent-dim: #1a8a08;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Iowan Old Style', 'Palatino', Georgia, serif;
+    font-size: 14px;
+    line-height: 1.5;
+    padding: 50px 60px;
+    min-width: 1200px;
+  }
+
+  header {
+    text-align: center;
+    margin-bottom: 60px;
+    padding-bottom: 30px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  h1 {
+    font-size: 28px;
+    font-weight: 300;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+
+  .subtitle {
+    color: var(--text-soft);
+    font-size: 13px;
+    letter-spacing: 1px;
+    font-style: italic;
+  }
+
+  .formula {
+    margin-top: 20px;
+    color: var(--accent);
+    font-size: 15px;
+    font-style: italic;
+    letter-spacing: 0.5px;
+  }
+
+  /* root */
+  .root {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 40px;
+  }
+
+  .root-box {
+    border: 2px solid var(--accent);
+    padding: 14px 36px;
+    font-size: 18px;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    color: var(--accent);
+    background: var(--bg);
+  }
+
+  .root-connector {
+    width: 2px;
+    height: 30px;
+    background: var(--accent);
+  }
+
+  /* main chapters row */
+  .chapters {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    gap: 24px;
+    margin-bottom: 30px;
+  }
+
+  .chapter {
+    border: 1px solid var(--text);
+    background: var(--bg-soft);
+  }
+
+  .chapter-header {
+    padding: 12px 16px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--accent);
+  }
+
+  .chapter-num {
+    color: var(--accent);
+    font-size: 12px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    display: block;
+    margin-bottom: 4px;
+  }
+
+  .chapter-title {
+    color: var(--text);
+    font-size: 19px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  .chapter-def {
+    padding: 10px 16px;
+    color: var(--text-soft);
+    font-size: 11px;
+    font-style: italic;
+    border-bottom: 1px solid var(--line);
+    line-height: 1.4;
+  }
+
+  .subchapters {
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .subchapter {
+    border-left: 2px solid var(--accent);
+    padding: 8px 12px;
+    background: rgba(57, 255, 20, 0.04);
+  }
+
+  .subchapter-num {
+    color: var(--accent);
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    display: block;
+    margin-bottom: 3px;
+  }
+
+  .subchapter-title {
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 4px;
+    letter-spacing: 0.5px;
+  }
+
+  .subchapter-def {
+    color: var(--text-soft);
+    font-size: 10px;
+    font-style: italic;
+    margin-bottom: 8px;
+    line-height: 1.4;
+  }
+
+  .leaves {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding-left: 4px;
+  }
+
+  .leaf {
+    font-size: 11px;
+    color: var(--text);
+    padding: 4px 8px;
+    border-left: 1px dotted var(--accent-dim);
+    line-height: 1.5;
+  }
+
+  .leaf-num {
+    color: var(--accent-dim);
+    font-size: 9px;
+    letter-spacing: 1px;
+    display: inline-block;
+    width: 50px;
+  }
+
+  .leaf-name {
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  .leaf-bullets {
+    display: block;
+    color: var(--text-soft);
+    font-size: 10px;
+    margin-top: 2px;
+    margin-left: 50px;
+    font-style: italic;
+  }
+
+  /* cycle diagram */
+  .cycle-section {
+    margin-top: 60px;
+    padding-top: 40px;
+    border-top: 1px solid var(--line);
+  }
+
+  .cycle-title {
+    text-align: center;
+    color: var(--accent);
+    font-size: 16px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin-bottom: 30px;
+  }
+
+  .cycle-diagram {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .cycle-svg {
+    width: 600px;
+    height: 320px;
+  }
+
+  /* boundaries */
+  .boundaries-section {
+    margin-top: 60px;
+    padding-top: 40px;
+    border-top: 1px solid var(--line);
+  }
+
+  .boundaries-title {
+    text-align: center;
+    color: var(--accent);
+    font-size: 16px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin-bottom: 30px;
+  }
+
+  .boundaries-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 30px;
+    max-width: 1000px;
+    margin: 0 auto;
+  }
+
+  .boundary {
+    border: 1px solid var(--accent);
+    padding: 24px;
+    text-align: center;
+    background: var(--bg-soft);
+  }
+
+  .boundary-name {
+    color: var(--accent);
+    font-size: 14px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+
+  .boundary-text {
+    color: var(--text);
+    font-size: 13px;
+    font-style: italic;
+    line-height: 1.5;
+  }
+
+  footer {
+    margin-top: 80px;
+    padding-top: 30px;
+    border-top: 1px solid var(--line);
+    text-align: center;
+    color: var(--text-soft);
+    font-size: 11px;
+    letter-spacing: 1px;
+  }
+
+  @media print {
+    body { padding: 20px; min-width: auto; }
+    .chapters { grid-template-columns: 1fr 1fr; gap: 16px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Логико-Информационный Трактат</h1>
+  <div class="subtitle">Онтологическая схема: Данные → Информация → Знания → Интеллект</div>
+  <div class="formula">«Границы моей модели знания суть границы моего мира»</div>
+</header>
+
+<div class="root">
+  <div class="root-box">МИР СУБЪЕКТА</div>
+  <div class="root-connector"></div>
+</div>
+
+<div class="chapters">
+
+  <!-- 1.1 ДАННЫЕ -->
+  <div class="chapter">
+    <div class="chapter-header">
+      <span class="chapter-num">1.1</span>
+      <span class="chapter-title">Данные</span>
+    </div>
+    <div class="chapter-def">Непрерывный поток фактов о мире</div>
+    <div class="subchapters">
+
+      <div class="subchapter">
+        <span class="subchapter-num">1.1.1</span>
+        <div class="subchapter-title">Реального мира</div>
+        <div class="subchapter-def">Поток явлений в физической и расширенной реальности</div>
+        <div class="leaves">
+          <div class="leaf"><span class="leaf-num">1.1.1.1</span> <span class="leaf-name">Дополненная реальность (AR)</span> — цифровой слой над реальным миром</div>
+          <div class="leaf"><span class="leaf-num">1.1.1.2</span> <span class="leaf-name">Смешанная реальность (MR)</span> — физическое взаимодействие с цифровыми объектами</div>
+          <div class="leaf"><span class="leaf-num">1.1.1.3</span> <span class="leaf-name">Виртуальная реальность (VR)</span> — замена физического мира синтетическим</div>
+        </div>
+      </div>
+
+      <div class="subchapter">
+        <span class="subchapter-num">1.1.2</span>
+        <div class="subchapter-title">Синтетические</div>
+        <div class="subchapter-def">Сгенерированные данные агентом</div>
+        <div class="leaves">
+          <div class="leaf">
+            <span class="leaf-num">1.1.2.1</span> <span class="leaf-name">Обучение</span>
+            <span class="leaf-bullets">с подкреплением / с учителем / без учителя</span>
+          </div>
+          <div class="leaf">
+            <span class="leaf-num">1.1.2.2</span> <span class="leaf-name">Мультиагентность</span>
+            <span class="leaf-bullets">распределённые решения / кооперация / конкуренция</span>
+          </div>
+          <div class="leaf">
+            <span class="leaf-num">1.1.2.3</span> <span class="leaf-name">Персонализация</span>
+            <span class="leaf-bullets">цифровая Персона / Человек / Самость</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="subchapter">
+        <span class="subchapter-num">1.1.3</span>
+        <div class="subchapter-title">Метаданные</div>
+        <div class="subchapter-def">Данные о взаимодействии агента с миром</div>
+        <div class="leaves">
+          <div class="leaf">
+            <span class="leaf-num">1.1.3.1</span> <span class="leaf-name">Метачеловек</span>
+            <span class="leaf-bullets">эмоциональная модель / когнитивная архитектура / этические рамки</span>
+          </div>
+          <div class="leaf">
+            <span class="leaf-num">1.1.3.2</span> <span class="leaf-name">Метагосударство</span>
+            <span class="leaf-bullets">децентрализация / самоорганизация / адаптивная юрисдикция</span>
+          </div>
+          <div class="leaf">
+            <span class="leaf-num">1.1.3.3</span> <span class="leaf-name">Метавселенная</span>
+            <span class="leaf-bullets">экономика / реальность</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- 1.2 ИНФОРМАЦИЯ -->
+  <div class="chapter">
+    <div class="chapter-header">
+      <span class="chapter-num">1.2</span>
+      <span class="chapter-title">Информация</span>
+    </div>
+    <div class="chapter-def">Упорядоченное состояние данных для хранения, обработки и передачи</div>
+    <div class="subchapters">
+
+      <div class="subchapter">
+        <span class="subchapter-num">1.2.1</span>
+        <div class="subchapter-title">Хранение</div>
+        <div class="subchapter-def">Способ существования информации в статическом виде</div>
+        <div class="leaves">
+          <div class="leaf"><span class="leaf-num">1.2.1.1</span> <span class="leaf-name">Внешний этап</span> — хранение за пределами агента</div>
+          <div class="leaf"><span class="leaf-num">1.2.1.2</span> <span class="leaf-name">Концептуальный этап</span> — придание смысловой формы</div>
+          <div class="leaf"><span class="leaf-num">1.2.1.3</span> <span class="leaf-name">Внутренний этап</span> — внутренняя память агента</div>
+        </div>
+      </div>
+
+      <div class="subchapter">
+        <span class="subchapter-num">1.2.2</span>
+        <div class="subchapter-title">Обработка</div>
+        <div class="subchapter-def">Преобразование входной информации в выходную</div>
+        <div class="leaves">
+          <div class="leaf"><span class="leaf-num">1.2.2.1</span> <span class="leaf-name">Ввод</span> — поток информации, поступающий в агента</div>
+          <div class="leaf"><span class="leaf-num">1.2.2.2</span> <span class="leaf-name">Анализ</span> — поиск закономерностей для извлечения смысла</div>
+          <div class="leaf"><span class="leaf-num">1.2.2.3</span> <span class="leaf-name">Вывод</span> — выходная форма по результатам анализа</div>
+        </div>
+      </div>
+
+      <div class="subchapter">
+        <span class="subchapter-num">1.2.3</span>
+        <div class="subchapter-title">Передача</div>
+        <div class="subchapter-def">Перемещение информации от одного агента к другому</div>
+        <div class="leaves">
+          <div class="leaf"><span class="leaf-num">1.2.3.1</span> <span class="leaf-name">Отправитель</span> — инициирует сообщение</div>
+          <div class="leaf"><span class="leaf-num">1.2.3.2</span> <span class="leaf-name">Канал</span> — пространственно-временная связь</div>
+          <div class="leaf"><span class="leaf-num">1.2.3.3</span> <span class="leaf-name">Получатель</span> — принимает сообщение</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- 1.3 ЗНАНИЯ -->
+  <div class="chapter">
+    <div class="chapter-header">
+      <span class="chapter-num">1.3</span>
+      <span class="chapter-title">Знания</span>
+    </div>
+    <div class="chapter-def">Информационная модель мира для взаимодействия агента с реальностью</div>
+    <div class="subchapters">
+
+      <div class="subchapter">
+        <span class="subchapter-num">1.3.1</span>
+        <div class="subchapter-title">Модель мира</div>
+        <div class="subchapter-def">Совокупность информации для понимания реальности</div>
+        <div class="leaves">
+          <div class="leaf"><span class="leaf-num">1.3.1.1</span> <span class="leaf-name">Физическая модель</span> — геометрия и логика взаимодействия объектов</div>
+          <div class="leaf"><span class="leaf-num">1.3.1.2</span> <span class="leaf-name">Концептуальная модель</span> — абстрактные сущности</div>
+          <div class="leaf"><span class="leaf-num">1.3.1.3</span> <span class="leaf-name">Логическая модель</span> — формальные правила вывода</div>
+        </div>
+      </div>
+
+      <div class="subchapter">
+        <span class="subchapter-num">1.3.2</span>
+        <div class="subchapter-title">Понимание</div>
+        <div class="subchapter-def">Связывает факты в целостную модель мира</div>
+        <div class="leaves">
+          <div class="leaf"><span class="leaf-num">1.3.2.1</span> <span class="leaf-name">Дедукция</span> — от общего правила к частному случаю</div>
+          <div class="leaf"><span class="leaf-num">1.3.2.2</span> <span class="leaf-name">Индукция</span> — от частных случаев к общему правилу</div>
+          <div class="leaf"><span class="leaf-num">1.3.2.3</span> <span class="leaf-name">Абдукция</span> — выдвижение гипотезы при неполноте данных</div>
+        </div>
+      </div>
+
+      <div class="subchapter">
+        <span class="subchapter-num">1.3.3</span>
+        <div class="subchapter-title">Генерация</div>
+        <div class="subchapter-def">Создание новых знаний сверх имеющихся</div>
+        <div class="leaves">
+          <div class="leaf"><span class="leaf-num">1.3.3.1</span> <span class="leaf-name">Анализ</span> — декомпозиция знаний на части</div>
+          <div class="leaf"><span class="leaf-num">1.3.3.2</span> <span class="leaf-name">Синтез</span> — создание нового знания на основе предыдущего</div>
+          <div class="leaf"><span class="leaf-num">1.3.3.3</span> <span class="leaf-name">Применение</span> — закрепление знания через действие</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- 1.4 ИНТЕЛЛЕКТ -->
+  <div class="chapter">
+    <div class="chapter-header">
+      <span class="chapter-num">1.4</span>
+      <span class="chapter-title">Интеллект</span>
+    </div>
+    <div class="chapter-def">Цикл, замыкающий данные, информацию и знания в самоподдерживающийся процесс</div>
+    <div class="subchapters">
+
+      <div class="subchapter">
+        <span class="subchapter-num">1.4.1</span>
+        <div class="subchapter-title">Цикл</div>
+        <div class="subchapter-def">S = (I, M, U, A): восприятие — модель — обновление — действие</div>
+        <div class="leaves">
+          <div class="leaf"><span class="leaf-num">1.4.1.1</span> <span class="leaf-name">Восприятие (I)</span> — регистрация данных среды</div>
+          <div class="leaf"><span class="leaf-num">1.4.1.2</span> <span class="leaf-name">Модель и обновление (M, U)</span> — внутренняя структура и её динамика</div>
+          <div class="leaf"><span class="leaf-num">1.4.1.3</span> <span class="leaf-name">Действие (A)</span> — выходное воздействие на среду</div>
+        </div>
+      </div>
+
+      <div class="subchapter">
+        <span class="subchapter-num">1.4.2</span>
+        <div class="subchapter-title">Внимание и свобода</div>
+        <div class="subchapter-def">Единственное место реальной свободы внутри цикла</div>
+        <div class="leaves">
+          <div class="leaf"><span class="leaf-num">1.4.2.1</span> <span class="leaf-name">Автоматизм цикла</span> — большая часть работы вне сознательного контроля</div>
+          <div class="leaf"><span class="leaf-num">1.4.2.2</span> <span class="leaf-name">Внимание как локус свободы</span> — главное открытие</div>
+          <div class="leaf"><span class="leaf-num">1.4.2.3</span> <span class="leaf-name">Этика внимания</span> — защита внимания как фундаментальная задача</div>
+        </div>
+      </div>
+
+      <div class="subchapter">
+        <span class="subchapter-num">1.4.3</span>
+        <div class="subchapter-title">Субъект</div>
+        <div class="subchapter-def">Устойчивая саморепрезентация в цикле с произвольным вниманием</div>
+        <div class="leaves">
+          <div class="leaf"><span class="leaf-num">1.4.3.1</span> <span class="leaf-name">Уровни саморепрезентации</span> — иерархия от гомеостаза до языка</div>
+          <div class="leaf"><span class="leaf-num">1.4.3.2</span> <span class="leaf-name">Сознание как интеграция</span> — режим работы с интегрированной сценой</div>
+          <div class="leaf"><span class="leaf-num">1.4.3.3</span> <span class="leaf-name">Предел</span> — о чём следует молчать</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<!-- ЦИКЛ ИНТЕЛЛЕКТА -->
+<div class="cycle-section">
+  <div class="cycle-title">Цикл интеллекта: S = (I, M, U, A)</div>
+  <div class="cycle-diagram">
+    <svg class="cycle-svg" viewBox="0 0 600 320">
+      <defs>
+        <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+          <polygon points="0 0, 10 3, 0 6" fill="#39ff14"/>
+        </marker>
+      </defs>
+
+      <!-- Outer circle showing the cycle flow -->
+      <ellipse cx="300" cy="160" rx="240" ry="110" fill="none" stroke="#1a8a08" stroke-width="1" stroke-dasharray="4,4"/>
+
+      <!-- Nodes -->
+      <g>
+        <!-- I -->
+        <circle cx="80" cy="160" r="42" fill="#0a0a0a" stroke="#39ff14" stroke-width="2"/>
+        <text x="80" y="155" text-anchor="middle" fill="#39ff14" font-size="22" font-weight="700">I</text>
+        <text x="80" y="178" text-anchor="middle" fill="#ededed" font-size="10">восприятие</text>
+
+        <!-- M -->
+        <circle cx="240" cy="60" r="42" fill="#0a0a0a" stroke="#39ff14" stroke-width="2"/>
+        <text x="240" y="55" text-anchor="middle" fill="#39ff14" font-size="22" font-weight="700">M</text>
+        <text x="240" y="78" text-anchor="middle" fill="#ededed" font-size="10">модель</text>
+
+        <!-- U -->
+        <circle cx="360" cy="60" r="42" fill="#0a0a0a" stroke="#39ff14" stroke-width="2"/>
+        <text x="360" y="55" text-anchor="middle" fill="#39ff14" font-size="22" font-weight="700">U</text>
+        <text x="360" y="78" text-anchor="middle" fill="#ededed" font-size="10">обновление</text>
+
+        <!-- A -->
+        <circle cx="520" cy="160" r="42" fill="#0a0a0a" stroke="#39ff14" stroke-width="2"/>
+        <text x="520" y="155" text-anchor="middle" fill="#39ff14" font-size="22" font-weight="700">A</text>
+        <text x="520" y="178" text-anchor="middle" fill="#ededed" font-size="10">действие</text>
+
+        <!-- Environment -->
+        <rect x="220" y="240" width="160" height="50" fill="#141414" stroke="#39ff14" stroke-width="1"/>
+        <text x="300" y="265" text-anchor="middle" fill="#ededed" font-size="13">СРЕДА</text>
+        <text x="300" y="282" text-anchor="middle" fill="#888" font-size="10" font-style="italic">источник данных</text>
+
+        <!-- Attention center -->
+        <circle cx="300" cy="160" r="34" fill="#0a0a0a" stroke="#39ff14" stroke-width="2" stroke-dasharray="3,3"/>
+        <text x="300" y="158" text-anchor="middle" fill="#39ff14" font-size="11" font-weight="700">ВНИМАНИЕ</text>
+        <text x="300" y="172" text-anchor="middle" fill="#39ff14" font-size="9" font-style="italic">свобода</text>
+      </g>
+
+      <!-- Arrows showing cycle -->
+      <g stroke="#39ff14" stroke-width="2" fill="none">
+        <path d="M 115 135 Q 175 90 200 65" marker-end="url(#arrowhead)"/>
+        <path d="M 285 60 L 320 60" marker-end="url(#arrowhead)"/>
+        <path d="M 400 65 Q 460 90 485 135" marker-end="url(#arrowhead)"/>
+        <path d="M 505 200 Q 480 240 380 263" marker-end="url(#arrowhead)"/>
+        <path d="M 220 263 Q 130 240 95 200" marker-end="url(#arrowhead)"/>
+      </g>
+
+      <!-- Connection from attention to all -->
+      <g stroke="#1a8a08" stroke-width="1" stroke-dasharray="2,4" fill="none">
+        <line x1="270" y1="150" x2="115" y2="155"/>
+        <line x1="285" y1="135" x2="245" y2="100"/>
+        <line x1="320" y1="135" x2="355" y2="100"/>
+        <line x1="330" y1="150" x2="485" y2="155"/>
+      </g>
+    </svg>
+  </div>
+</div>
+
+<!-- ТРИ ГРАНИЦЫ МИРА -->
+<div class="boundaries-section">
+  <div class="boundaries-title">Три границы мира субъекта</div>
+  <div class="boundaries-grid">
+    <div class="boundary">
+      <div class="boundary-name">Граница данных</div>
+      <div class="boundary-text">О чём невозможно собрать данные, того нет в мире субъекта</div>
+    </div>
+    <div class="boundary">
+      <div class="boundary-name">Граница модели</div>
+      <div class="boundary-text">О чём невозможно построить модель, того нельзя знать</div>
+    </div>
+    <div class="boundary">
+      <div class="boundary-name">Граница внимания</div>
+      <div class="boundary-text">О чём невозможно удержать внимание, того нельзя свободно выбрать</div>
+    </div>
+  </div>
+  <div style="text-align:center; margin-top: 30px; color: #888; font-size: 12px; letter-spacing: 1.5px; font-style: italic;">
+    За пределом — молчание.
+  </div>
+</div>
+
+<footer>
+  TRACTATUS LOGICO-INFORMATICUS · Май 2026
+</footer>
+
+</body>
+</html>
