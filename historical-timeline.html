@@ -2,6 +2,8 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Исторический таймлайн философов и идей датаизма: от Пифагора до Ванчурина">
 <title>Исторический таймлайн Датаизма</title>
 <style>
   :root {
@@ -267,6 +269,19 @@
   @media print {
     body { padding: 20px 0; }
     .era { page-break-inside: avoid; }
+  }
+
+  @media (max-width: 768px) {
+    .container { padding: 30px 16px; }
+    h1 { font-size: 22px; letter-spacing: 2px; }
+    .subtitle { font-size: 13px; }
+    .lead { font-size: 13px; padding: 16px; }
+    .era-header { flex-direction: column; gap: 8px; }
+    .era-number { font-size: 36px; }
+    .era-name { font-size: 18px; }
+    .timeline { padding-left: 20px; }
+    .entry-name { font-size: 14px; }
+    .entry-content { font-size: 13px; }
   }
 </style>
 </head>

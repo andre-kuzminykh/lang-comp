@@ -2,6 +2,8 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Концентрическая схема будущего по эссе «Что нас ждёт»">
 <title>Что нас ждёт — концентрическая схема</title>
 <style>
   :root {
@@ -270,6 +272,17 @@
   @media print {
     body { padding: 20px; }
     svg.main-diagram { width: 600px; height: 600px; }
+  }
+
+  @media (max-width: 768px) {
+    body { padding: 30px 12px; }
+    .container { padding: 0; }
+    h1 { font-size: 22px; letter-spacing: 2px; }
+    .subtitle { font-size: 13px; }
+    .formula { font-size: 12px; padding: 14px; }
+    svg.main-diagram { width: 100%; height: auto; }
+    .scenarios-grid { grid-template-columns: 1fr !important; gap: 16px; }
+    .actions-container { flex-direction: column; align-items: center; }
   }
 </style>
 </head>
