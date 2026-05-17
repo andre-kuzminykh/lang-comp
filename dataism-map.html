@@ -1,0 +1,1120 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Карта Датаизма — интерактивная онтология</title>
+<style>
+  :root {
+    --bg: #050505;
+    --bg-soft: #111;
+    --bg-card: #161616;
+    --line: #2a2a2a;
+    --text: #ededed;
+    --text-soft: #888;
+    --accent: #39ff14;
+    --accent-dim: #1a8a08;
+    --accent-glow: rgba(57, 255, 20, 0.4);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Iowan Old Style', 'Palatino', Georgia, serif;
+    font-size: 14px;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  /* Header */
+  header {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 60px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 30px;
+    z-index: 100;
+  }
+
+  h1 {
+    font-size: 18px;
+    font-weight: 300;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--text);
+  }
+
+  h1 span { color: var(--accent); }
+
+  .controls {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+
+  .control-btn {
+    background: var(--bg-soft);
+    border: 1px solid var(--line);
+    color: var(--text);
+    padding: 6px 14px;
+    font-family: inherit;
+    font-size: 12px;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .control-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  /* Main canvas */
+  .canvas-container {
+    position: absolute;
+    top: 60px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    overflow: hidden;
+    cursor: grab;
+    user-select: none;
+  }
+  .canvas-container:active { cursor: grabbing; }
+
+  .canvas {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform-origin: 0 0;
+  }
+
+  /* SVG graph */
+  svg {
+    display: block;
+    overflow: visible;
+  }
+
+  .node {
+    cursor: pointer;
+    transition: filter 0.2s;
+  }
+
+  .node:hover {
+    filter: drop-shadow(0 0 12px var(--accent));
+  }
+
+  .node-circle {
+    fill: var(--bg-card);
+    stroke: var(--accent);
+    stroke-width: 2;
+    transition: all 0.3s;
+  }
+
+  .node.center .node-circle {
+    fill: var(--bg);
+    stroke: var(--accent);
+    stroke-width: 3;
+    filter: drop-shadow(0 0 20px var(--accent-glow));
+  }
+
+  .node.main-branch .node-circle {
+    stroke-width: 2.5;
+  }
+
+  .node.sub .node-circle {
+    stroke: var(--accent);
+    stroke-width: 1.5;
+  }
+
+  .node.leaf .node-circle {
+    stroke: var(--accent-dim);
+    stroke-width: 1;
+  }
+
+  .node.inner .node-circle {
+    fill: var(--bg-soft);
+    stroke: var(--accent);
+    stroke-width: 1.5;
+    stroke-dasharray: 4,3;
+  }
+
+  .node-label {
+    fill: var(--text);
+    text-anchor: middle;
+    dominant-baseline: middle;
+    pointer-events: none;
+    font-family: 'Iowan Old Style', 'Palatino', Georgia, serif;
+  }
+
+  .node.center .node-label {
+    fill: var(--accent);
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  .node.main-branch .node-label {
+    fill: var(--accent);
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  .node.sub .node-label {
+    fill: var(--text);
+    font-size: 11px;
+    letter-spacing: 0.5px;
+  }
+
+  .node.leaf .node-label {
+    fill: var(--text-soft);
+    font-size: 9px;
+  }
+
+  .node.inner .node-label {
+    fill: var(--accent);
+    font-size: 10px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  /* Connecting lines */
+  .edge {
+    fill: none;
+    stroke: var(--accent-dim);
+    stroke-width: 1;
+    opacity: 0.5;
+  }
+
+  .edge.main {
+    stroke: var(--accent);
+    stroke-width: 1.5;
+    opacity: 0.8;
+  }
+
+  .edge.inner {
+    stroke: var(--accent);
+    stroke-width: 1;
+    stroke-dasharray: 3,3;
+    opacity: 0.7;
+  }
+
+  .cycle-arrow {
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 2;
+    opacity: 0.7;
+  }
+
+  /* Detail panel */
+  .detail-panel {
+    position: fixed;
+    top: 60px;
+    right: -500px;
+    width: 480px;
+    height: calc(100vh - 60px);
+    background: var(--bg-soft);
+    border-left: 1px solid var(--accent);
+    padding: 30px;
+    overflow-y: auto;
+    transition: right 0.4s ease;
+    z-index: 200;
+    box-shadow: -10px 0 30px rgba(0,0,0,0.5);
+  }
+
+  .detail-panel.open { right: 0; }
+
+  .detail-close {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background: transparent;
+    border: 1px solid var(--text-soft);
+    color: var(--text-soft);
+    width: 30px;
+    height: 30px;
+    font-size: 18px;
+    cursor: pointer;
+    line-height: 1;
+    transition: all 0.2s;
+  }
+  .detail-close:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+
+  .detail-num {
+    color: var(--accent);
+    font-size: 12px;
+    letter-spacing: 2px;
+    margin-bottom: 8px;
+    display: block;
+  }
+
+  .detail-title {
+    color: var(--text);
+    font-size: 24px;
+    font-weight: 300;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .detail-def {
+    color: var(--accent);
+    font-size: 14px;
+    font-style: italic;
+    line-height: 1.6;
+    margin-bottom: 24px;
+    padding-left: 14px;
+    border-left: 2px solid var(--accent);
+  }
+
+  .detail-section {
+    margin-bottom: 24px;
+  }
+
+  .detail-section-label {
+    color: var(--text-soft);
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+
+  .detail-text {
+    color: var(--text);
+    font-size: 13px;
+    line-height: 1.7;
+  }
+
+  .detail-list {
+    list-style: none;
+  }
+
+  .detail-list li {
+    color: var(--text);
+    font-size: 13px;
+    padding: 6px 0 6px 14px;
+    border-left: 1px solid var(--accent-dim);
+    margin-bottom: 4px;
+  }
+
+  .detail-list li strong {
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  .detail-children-section {
+    margin-top: 30px;
+    padding-top: 24px;
+    border-top: 1px solid var(--line);
+  }
+
+  .detail-children {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .detail-child {
+    border: 1px solid var(--line);
+    background: var(--bg-card);
+    padding: 10px 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .detail-child:hover {
+    border-color: var(--accent);
+    background: rgba(57, 255, 20, 0.06);
+  }
+
+  .detail-child-num {
+    color: var(--accent);
+    font-size: 10px;
+    letter-spacing: 1.5px;
+  }
+
+  .detail-child-name {
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 600;
+    margin-top: 4px;
+  }
+
+  .detail-child-def {
+    color: var(--text-soft);
+    font-size: 11px;
+    margin-top: 4px;
+    font-style: italic;
+  }
+
+  /* Hint */
+  .hint {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-soft);
+    border: 1px solid var(--accent);
+    padding: 10px 20px;
+    color: var(--text-soft);
+    font-size: 11px;
+    letter-spacing: 1px;
+    z-index: 50;
+    pointer-events: none;
+    transition: opacity 0.5s;
+  }
+  .hint.hidden { opacity: 0; }
+
+  .hint kbd {
+    background: var(--bg);
+    color: var(--accent);
+    padding: 1px 6px;
+    border: 1px solid var(--accent-dim);
+    font-family: monospace;
+    font-size: 10px;
+    margin: 0 2px;
+  }
+
+  /* Tooltip */
+  .tooltip {
+    position: fixed;
+    background: var(--bg-soft);
+    border: 1px solid var(--accent);
+    padding: 8px 12px;
+    color: var(--text);
+    font-size: 12px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 150;
+    max-width: 220px;
+    line-height: 1.4;
+  }
+
+  .tooltip.visible { opacity: 1; }
+
+  .tooltip-name {
+    color: var(--accent);
+    font-weight: 600;
+    margin-bottom: 4px;
+    font-size: 13px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Карта <span>Датаизма</span> · Интерактивная онтология</h1>
+  <div class="controls">
+    <button class="control-btn" id="zoom-in">+</button>
+    <button class="control-btn" id="zoom-out">−</button>
+    <button class="control-btn" id="reset">центр</button>
+  </div>
+</header>
+
+<div class="canvas-container" id="canvas-container">
+  <div class="canvas" id="canvas">
+    <svg id="graph" width="1800" height="1800" viewBox="0 0 1800 1800" style="transform: translate(-50%, -50%);">
+      <defs>
+        <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+          <polygon points="0 0, 10 3, 0 6" fill="#39ff14"/>
+        </marker>
+        <marker id="arrow-small" markerWidth="8" markerHeight="8" refX="6" refY="2.5" orient="auto">
+          <polygon points="0 0, 8 2.5, 0 5" fill="#1a8a08"/>
+        </marker>
+      </defs>
+
+      <!-- Edges will be inserted here by JS -->
+      <g id="edges"></g>
+
+      <!-- Cycle arrows between main branches -->
+      <g id="cycle-arrows"></g>
+
+      <!-- Nodes will be inserted here by JS -->
+      <g id="nodes"></g>
+    </svg>
+  </div>
+</div>
+
+<div class="detail-panel" id="detail-panel">
+  <button class="detail-close" id="detail-close">×</button>
+  <div id="detail-content"></div>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<div class="hint" id="hint">
+  <kbd>тяни</kbd> для перемещения · <kbd>колесо</kbd> для масштаба · <kbd>клик</kbd> для деталей
+</div>
+
+<script>
+// ============================================================
+// ОНТОЛОГИЯ ДАТАИЗМА — данные
+// ============================================================
+const ontology = {
+  center: {
+    id: 'intelligence',
+    num: '1.4',
+    name: 'ИНТЕЛЛЕКТ',
+    def: 'Цикл, замыкающий данные, информацию и знания в самоподдерживающийся процесс',
+    full: 'Интеллект — не свойство и не субстанция. Интеллект есть процесс — замкнутый цикл преобразования данных, информации и знания. Минимальная схема: S = (I, M, U, A), где I — пространство входящих данных, M — внутренняя модель, U — оператор обновления, A — оператор действия. Цикл субстратно независим: та же логика реализуема в любых носителях, способных поддерживать нужную динамику. Это объединяет биологический и цифровой интеллект как два варианта одной структуры.',
+    inner: [
+      {
+        id: 'cycle',
+        num: '1.4.1',
+        name: 'Цикл',
+        def: 'Замкнутый процесс восприятия, моделирования, действия и обновления',
+        full: 'Цикл S = (I, M, U, A) — фундамент всякого интеллекта. Цикл замкнут: действие меняет среду; изменённая среда порождает новые данные; новые данные обновляют модель. Три компонента: восприятие (вход), модель и обновление (преобразование), действие (выход). Цикл имеет характерное время — длительность одной итерации.',
+        children: [
+          { num: '1.4.1.1', name: 'Восприятие (I)', def: 'Регистрация данных среды через сенсоры' },
+          { num: '1.4.1.2', name: 'Модель и обновление (M, U)', def: 'Внутренняя структура и её динамика' },
+          { num: '1.4.1.3', name: 'Действие (A)', def: 'Выходное воздействие агента на среду' }
+        ]
+      },
+      {
+        id: 'attention',
+        num: '1.4.2',
+        name: 'Внимание',
+        def: 'Единственное место реальной свободы внутри цикла',
+        full: 'Цикл S = (I, M, U, A) автоматичен в большей части. Единственная операция, не сводимая к автоматизму — направление произвольного внимания. Свобода воли есть способность направлять произвольное внимание вопреки сильным автоматическим тенденциям. Через внимание свобода кумулятивна: малый выбор внимания через цепь «внимание → усиление в модели → прогноз → действие → среда → новые данные» становится изменением мира.',
+        children: [
+          { num: '1.4.2.1', name: 'Автоматизм цикла', def: 'Большая часть работы цикла происходит без сознательного контроля' },
+          { num: '1.4.2.2', name: 'Внимание как локус свободы', def: 'Главное открытие — место реальной агентности' },
+          { num: '1.4.2.3', name: 'Этика внимания', def: 'Защита внимания как фундаментальная задача' }
+        ]
+      },
+      {
+        id: 'subject',
+        num: '1.4.3',
+        name: 'Субъект',
+        def: 'Устойчивая саморепрезентация в цикле с произвольным вниманием',
+        full: 'Субъект есть не просто цикл, но цикл, в котором есть устойчивая саморепрезентация и произвольное внимание. Минимальные условия: цикл реализован; M содержит самомодель M\'; есть архитектура произвольного внимания; есть временная связность M через изменения. Субъектность градуальна: разные системы имеют её в разной степени.',
+        children: [
+          { num: '1.4.3.1', name: 'Уровни саморепрезентации', def: '11 уровней от гомеостаза до символической компрессии' },
+          { num: '1.4.3.2', name: 'Сознание как интеграция', def: 'Режим работы цикла с интегрированной сценой' },
+          { num: '1.4.3.3', name: 'Предел', def: 'О чём следует молчать' }
+        ]
+      }
+    ]
+  },
+  branches: [
+    {
+      id: 'data',
+      num: '1.1',
+      name: 'ДАННЫЕ',
+      angle: -90,
+      def: 'Непрерывный поток фактов о мире',
+      full: 'Есть данные. Данное есть зарегистрированный факт. Факт есть зафиксированное различие в состояниях мира. Регистрация есть устойчивое сохранение факта в носителе. Данные приходят непрерывно, не дискретно. Атом данного — бит. Данные классифицируются по источнику: реального мира (источник вне агента), синтетические (порождённые агентом), метаданные (данные о взаимодействии). Эти три класса исчерпывают онтологическое многообразие.',
+      sub: [
+        {
+          id: 'real-data',
+          num: '1.1.1',
+          name: 'Реального мира',
+          def: 'Поток явлений в физической и расширенной реальности',
+          full: 'Данные реального мира — данные, источник которых лежит вне агента, в той или иной форме реальности. Три формы реальности по отношению цифрового и физического: дополненная (AR), смешанная (MR), виртуальная (VR). Данные реального мира служат критерием истинности модели: модель проверяется столкновением с потоком, который она не порождает.',
+          leaves: [
+            { num: '1.1.1.1', name: 'AR (Дополненная)', def: 'Цифровой слой над реальным миром' },
+            { num: '1.1.1.2', name: 'MR (Смешанная)', def: 'Физическое взаимодействие с цифровыми объектами' },
+            { num: '1.1.1.3', name: 'VR (Виртуальная)', def: 'Замена физического мира синтетическим' }
+          ]
+        },
+        {
+          id: 'synthetic-data',
+          num: '1.1.2',
+          name: 'Синтетические',
+          def: 'Сгенерированные данные агентом',
+          full: 'Синтетические данные — данные, порождённые самим агентом, а не пришедшие извне. Онтологически равноправны данным реального мира. Три источника: обучение (выделение паттернов), мультиагентность (взаимодействие агентов), персонализация (индивидуализация контекста).',
+          leaves: [
+            { num: '1.1.2.1', name: 'Обучение', def: 'Подкрепление / учитель / без учителя' },
+            { num: '1.1.2.2', name: 'Мультиагентность', def: 'Распределённость / кооперация / конкуренция' },
+            { num: '1.1.2.3', name: 'Персонализация', def: 'Персона / Человек / Самость' }
+          ]
+        },
+        {
+          id: 'metadata',
+          num: '1.1.3',
+          name: 'Метаданные',
+          def: 'Данные о взаимодействии агента с миром',
+          full: 'Метаданные — данные о том, как агент взаимодействует с миром. Без метаданных первичные данные неинтерпретируемы. Кто контролирует метаданные, контролирует смысл первичных данных. Три класса: Метачеловек (об агенте), Метагосударство (о правилах), Метавселенная (о мирах).',
+          leaves: [
+            { num: '1.1.3.1', name: 'Метачеловек', def: 'Эмоции / когниция / этика' },
+            { num: '1.1.3.2', name: 'Метагосударство', def: 'Децентрализация / самоорганизация / юрисдикция' },
+            { num: '1.1.3.3', name: 'Метавселенная', def: 'Экономика / реальность' }
+          ]
+        }
+      ]
+    },
+    {
+      id: 'information',
+      num: '1.2',
+      name: 'ИНФОРМАЦИЯ',
+      angle: 30,
+      def: 'Упорядоченное состояние данных для хранения, обработки и передачи',
+      full: 'Информация — упорядоченные данные, существующие в одном из трёх режимов: хранение, обработка, передача. Без этих режимов данные не существуют операционально. Эти три режима исчерпывают жизненные функции данных. Информация измеряется в битах. Шенноновская энтропия — мера неопределённости источника.',
+      sub: [
+        {
+          id: 'storage',
+          num: '1.2.1',
+          name: 'Хранение',
+          def: 'Способ существования информации в статическом виде',
+          full: 'Хранение — удержание информации без преднамеренного изменения. Любое хранение — борьба с энтропией. Три этапа хранения: внешний (за пределами агента), концептуальный (придание смысловой формы), внутренний (память агента).',
+          leaves: [
+            { num: '1.2.1.1', name: 'Внешний этап', def: 'Хранение за пределами агента' },
+            { num: '1.2.1.2', name: 'Концептуальный этап', def: 'Придание агентом смысловой формы' },
+            { num: '1.2.1.3', name: 'Внутренний этап', def: 'Внутренняя память агента' }
+          ]
+        },
+        {
+          id: 'processing',
+          num: '1.2.2',
+          name: 'Обработка',
+          def: 'Преобразование входной информации в выходную',
+          full: 'Обработка — преобразование входной информации в выходную по правилам. Правила могут быть жёсткими (классические алгоритмы) или обучаемыми (нейронные сети). Три этапа: ввод (поток в агента), анализ (поиск закономерностей), вывод (выходная форма).',
+          leaves: [
+            { num: '1.2.2.1', name: 'Ввод', def: 'Поток информации, поступающий в агента' },
+            { num: '1.2.2.2', name: 'Анализ', def: 'Поиск закономерностей для извлечения смысла' },
+            { num: '1.2.2.3', name: 'Вывод', def: 'Выходная форма по результатам анализа' }
+          ]
+        },
+        {
+          id: 'transmission',
+          num: '1.2.3',
+          name: 'Передача',
+          def: 'Перемещение информации от одного агента к другому',
+          full: 'Передача — копирование информации от источника к адресату через канал. Без передачи информация остаётся изолированной; коллективное познание и действие невозможны. Три позиции: отправитель (инициирует сообщение), канал (пространственно-временная связь), получатель (принимает сообщение).',
+          leaves: [
+            { num: '1.2.3.1', name: 'Отправитель', def: 'Инициирует информационное сообщение' },
+            { num: '1.2.3.2', name: 'Канал', def: 'Пространственно-временная связь' },
+            { num: '1.2.3.3', name: 'Получатель', def: 'Принимает информационное сообщение' }
+          ]
+        }
+      ]
+    },
+    {
+      id: 'knowledge',
+      num: '1.3',
+      name: 'ЗНАНИЯ',
+      angle: 150,
+      def: 'Информационная модель мира для взаимодействия агента с реальностью',
+      full: 'Знания — модель, представляющая мир в форме, пригодной для предсказания и действия. Не сама информация; информация, организованная в работающую модель. Главная формула: «Границы моей модели знания суть границы моего мира». Мир шире модели, но субъект действует только внутри модели. Три аспекта: модель мира, понимание, генерация.',
+      sub: [
+        {
+          id: 'world-model',
+          num: '1.3.1',
+          name: 'Модель мира',
+          def: 'Совокупность информации, которую агент использует для понимания реальности',
+          full: 'Модель мира — внутренняя структура агента, представляющая мир. Иерархична и состоит из подмоделей разных типов. Три подмодели: физическая (геометрия и логика взаимодействия объектов), концептуальная (абстрактные сущности), логическая (формальные правила вывода).',
+          leaves: [
+            { num: '1.3.1.1', name: 'Физическая', def: 'Геометрия и взаимодействие объектов' },
+            { num: '1.3.1.2', name: 'Концептуальная', def: 'Абстрактные сущности вне физической реальности' },
+            { num: '1.3.1.3', name: 'Логическая', def: 'Формальные правила вывода' }
+          ]
+        },
+        {
+          id: 'understanding',
+          num: '1.3.2',
+          name: 'Понимание',
+          def: 'Связывает факты в целостную модель мира',
+          full: 'Понимание — процесс связывания отдельных фактов в целостную модель. Без понимания знание остаётся набором изолированных утверждений. Три режима: дедукция (от общего к частному), индукция (от частного к общему), абдукция (выдвижение гипотезы при неполноте).',
+          leaves: [
+            { num: '1.3.2.1', name: 'Дедукция', def: 'От общего правила к частному случаю' },
+            { num: '1.3.2.2', name: 'Индукция', def: 'От частных случаев к общему правилу' },
+            { num: '1.3.2.3', name: 'Абдукция', def: 'Выдвижение гипотезы при неполноте данных' }
+          ]
+        },
+        {
+          id: 'generation',
+          num: '1.3.3',
+          name: 'Генерация',
+          def: 'Создание новых знаний сверх имеющихся',
+          full: 'Генерация — создание новых единиц знания, не сводимых к простой комбинации имеющихся. Творческая сторона интеллекта. Без неё агент только воспроизводит, не создавая. Три режима: анализ (декомпозиция), синтез (создание нового на основе предыдущего), применение (закрепление через действие).',
+          leaves: [
+            { num: '1.3.3.1', name: 'Анализ', def: 'Декомпозиция знаний на части в поиске смысла' },
+            { num: '1.3.3.2', name: 'Синтез', def: 'Создание нового знания на основе предыдущего' },
+            { num: '1.3.3.3', name: 'Применение', def: 'Закрепление знания через действие' }
+          ]
+        }
+      ]
+    }
+  ]
+};
+
+// ============================================================
+// РИСОВАНИЕ ГРАФА
+// ============================================================
+const CX = 900, CY = 900;
+const R_INNER = 100;
+const R_CENTER = 90;
+const R_MAIN = 350;
+const R_MAIN_NODE = 85;
+const R_SUB = 580;
+const R_SUB_NODE = 60;
+const R_LEAF = 780;
+const R_LEAF_NODE = 50;
+
+const nodesGroup = document.getElementById('nodes');
+const edgesGroup = document.getElementById('edges');
+const cycleArrowsGroup = document.getElementById('cycle-arrows');
+
+// Все узлы для управления
+const allNodes = new Map();
+
+// Центральный узел: Интеллект
+function drawCenter() {
+  // Inner satellites (Цикл, Внимание, Субъект) — внутри центра
+  ontology.center.inner.forEach((inner, i) => {
+    const angle = (-90 + i * 120) * Math.PI / 180;
+    const x = CX + Math.cos(angle) * R_INNER * 0.55;
+    const y = CY + Math.sin(angle) * R_INNER * 0.55;
+    inner._x = x;
+    inner._y = y;
+    inner._r = 38;
+
+    // Connection from center to inner
+    const e = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    e.setAttribute('x1', CX);
+    e.setAttribute('y1', CY);
+    e.setAttribute('x2', x);
+    e.setAttribute('y2', y);
+    e.setAttribute('class', 'edge inner');
+    edgesGroup.appendChild(e);
+  });
+
+  // Center node
+  drawNode(CX, CY, R_CENTER, ontology.center, 'center');
+
+  // Inner satellites
+  ontology.center.inner.forEach(inner => {
+    drawNode(inner._x, inner._y, inner._r, inner, 'inner');
+  });
+}
+
+// Главные ветви
+function drawBranches() {
+  ontology.branches.forEach(branch => {
+    const angle = branch.angle * Math.PI / 180;
+    const bx = CX + Math.cos(angle) * R_MAIN;
+    const by = CY + Math.sin(angle) * R_MAIN;
+    branch._x = bx;
+    branch._y = by;
+    branch._r = R_MAIN_NODE;
+
+    // Connection from center to branch
+    const e = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    e.setAttribute('x1', CX);
+    e.setAttribute('y1', CY);
+    e.setAttribute('x2', bx);
+    e.setAttribute('y2', by);
+    e.setAttribute('class', 'edge main');
+    edgesGroup.appendChild(e);
+
+    // Sub-branches
+    branch.sub.forEach((sub, i) => {
+      const spreadAngle = 40; // degrees spread
+      const subAngle = (branch.angle - spreadAngle + i * spreadAngle) * Math.PI / 180;
+      const sx = CX + Math.cos(subAngle) * R_SUB;
+      const sy = CY + Math.sin(subAngle) * R_SUB;
+      sub._x = sx;
+      sub._y = sy;
+      sub._r = R_SUB_NODE;
+
+      // Connection from branch to sub
+      const e2 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      e2.setAttribute('x1', bx);
+      e2.setAttribute('y1', by);
+      e2.setAttribute('x2', sx);
+      e2.setAttribute('y2', sy);
+      e2.setAttribute('class', 'edge');
+      edgesGroup.appendChild(e2);
+
+      // Leaves
+      sub.leaves.forEach((leaf, j) => {
+        const leafSpread = 14;
+        const leafAngle = (branch.angle - spreadAngle + i * spreadAngle - leafSpread + j * leafSpread) * Math.PI / 180;
+        const lx = CX + Math.cos(leafAngle) * R_LEAF;
+        const ly = CY + Math.sin(leafAngle) * R_LEAF;
+        leaf._x = lx;
+        leaf._y = ly;
+        leaf._r = R_LEAF_NODE;
+        leaf.parent = sub;
+
+        // Connection from sub to leaf
+        const e3 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        e3.setAttribute('x1', sx);
+        e3.setAttribute('y1', sy);
+        e3.setAttribute('x2', lx);
+        e3.setAttribute('y2', ly);
+        e3.setAttribute('class', 'edge');
+        edgesGroup.appendChild(e3);
+      });
+    });
+  });
+
+  // Draw branches and subs after edges
+  ontology.branches.forEach(branch => {
+    drawNode(branch._x, branch._y, branch._r, branch, 'main-branch');
+    branch.sub.forEach(sub => {
+      drawNode(sub._x, sub._y, sub._r, sub, 'sub');
+      sub.leaves.forEach(leaf => {
+        drawNode(leaf._x, leaf._y, leaf._r, leaf, 'leaf');
+      });
+    });
+  });
+}
+
+// Циклические стрелки между Данные → Информация → Знания → Данные
+function drawCycleArrows() {
+  const branches = ontology.branches;
+  for (let i = 0; i < branches.length; i++) {
+    const a = branches[i];
+    const b = branches[(i + 1) % branches.length];
+
+    // Внешняя дуга между ними
+    const angle1 = a.angle * Math.PI / 180;
+    const angle2 = b.angle * Math.PI / 180;
+    const r = R_MAIN + R_MAIN_NODE + 30;
+    const x1 = CX + Math.cos(angle1) * r;
+    const y1 = CY + Math.sin(angle1) * r;
+    const x2 = CX + Math.cos(angle2) * r;
+    const y2 = CY + Math.sin(angle2) * r;
+
+    // Большая дуга вокруг центра
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    const sweep = (b.angle - a.angle + 360) % 360 > 180 ? 0 : 1;
+    path.setAttribute('d', `M ${x1} ${y1} A ${r} ${r} 0 0 ${sweep} ${x2} ${y2}`);
+    path.setAttribute('class', 'cycle-arrow');
+    path.setAttribute('marker-end', 'url(#arrow)');
+    cycleArrowsGroup.appendChild(path);
+  }
+}
+
+function drawNode(x, y, r, data, type) {
+  const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  g.setAttribute('class', 'node ' + type);
+  g.setAttribute('transform', `translate(${x}, ${y})`);
+
+  const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+  circle.setAttribute('class', 'node-circle');
+  circle.setAttribute('r', r);
+  g.appendChild(circle);
+
+  // Текст. Если длинный — переносим
+  const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  label.setAttribute('class', 'node-label');
+  const lines = wrapText(data.name, type);
+  if (lines.length === 1) {
+    label.textContent = lines[0];
+  } else {
+    lines.forEach((line, idx) => {
+      const tspan = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
+      tspan.setAttribute('x', 0);
+      tspan.setAttribute('dy', idx === 0 ? `${-(lines.length - 1) * 0.5}em` : '1.2em');
+      tspan.textContent = line;
+      label.appendChild(tspan);
+    });
+  }
+  g.appendChild(label);
+
+  // Номер сверху
+  if (data.num && type !== 'leaf') {
+    const num = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    num.setAttribute('class', 'node-label');
+    num.setAttribute('font-size', type === 'center' ? '10' : (type === 'main-branch' ? '9' : '8'));
+    num.setAttribute('fill', '#1a8a08');
+    num.setAttribute('y', -r + 14);
+    num.setAttribute('letter-spacing', '1');
+    num.textContent = data.num;
+    g.appendChild(num);
+  }
+
+  g.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openDetail(data, type);
+  });
+
+  g.addEventListener('mouseenter', (e) => {
+    showTooltip(e, data);
+  });
+  g.addEventListener('mousemove', (e) => {
+    moveTooltip(e);
+  });
+  g.addEventListener('mouseleave', () => {
+    hideTooltip();
+  });
+
+  nodesGroup.appendChild(g);
+  allNodes.set(data.num, data);
+}
+
+function wrapText(text, type) {
+  // Простая обёртка: длинные имена в две строки
+  const maxLen = type === 'center' || type === 'main-branch' ? 14 : 16;
+  if (text.length <= maxLen) return [text];
+
+  const words = text.split(' ');
+  if (words.length === 1) return [text];
+
+  // Разделить на две части примерно поровну
+  let firstLine = words[0];
+  let secondLine = words.slice(1).join(' ');
+
+  if (words.length > 2) {
+    const half = Math.ceil(words.length / 2);
+    firstLine = words.slice(0, half).join(' ');
+    secondLine = words.slice(half).join(' ');
+  }
+
+  return [firstLine, secondLine];
+}
+
+// ============================================================
+// ПАНЕЛЬ ДЕТАЛЕЙ
+// ============================================================
+const detailPanel = document.getElementById('detail-panel');
+const detailContent = document.getElementById('detail-content');
+const detailClose = document.getElementById('detail-close');
+
+function openDetail(data, type) {
+  const html = `
+    <span class="detail-num">${data.num || ''}</span>
+    <h2 class="detail-title">${data.name}</h2>
+    ${data.def ? `<div class="detail-def">«${data.def}»</div>` : ''}
+
+    ${data.full ? `
+      <div class="detail-section">
+        <div class="detail-section-label">Описание</div>
+        <div class="detail-text">${data.full}</div>
+      </div>
+    ` : ''}
+
+    ${data.children && data.children.length ? `
+      <div class="detail-children-section">
+        <div class="detail-section-label">Внутренние компоненты</div>
+        <div class="detail-children">
+          ${data.children.map(c => `
+            <div class="detail-child">
+              <div class="detail-child-num">${c.num}</div>
+              <div class="detail-child-name">${c.name}</div>
+              <div class="detail-child-def">${c.def}</div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    ` : ''}
+
+    ${data.sub && data.sub.length ? `
+      <div class="detail-children-section">
+        <div class="detail-section-label">Подветви</div>
+        <div class="detail-children" id="sub-children">
+          ${data.sub.map(s => `
+            <div class="detail-child" data-num="${s.num}">
+              <div class="detail-child-num">${s.num}</div>
+              <div class="detail-child-name">${s.name}</div>
+              <div class="detail-child-def">${s.def}</div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    ` : ''}
+
+    ${data.leaves && data.leaves.length ? `
+      <div class="detail-children-section">
+        <div class="detail-section-label">Листья</div>
+        <div class="detail-children">
+          ${data.leaves.map(l => `
+            <div class="detail-child">
+              <div class="detail-child-num">${l.num}</div>
+              <div class="detail-child-name">${l.name}</div>
+              <div class="detail-child-def">${l.def}</div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    ` : ''}
+  `;
+
+  detailContent.innerHTML = html;
+  detailPanel.classList.add('open');
+
+  // Сделать sub-children кликабельными
+  document.querySelectorAll('.detail-child[data-num]').forEach(el => {
+    el.addEventListener('click', () => {
+      const num = el.dataset.num;
+      const data = allNodes.get(num);
+      if (data) openDetail(data, 'sub');
+    });
+  });
+}
+
+detailClose.addEventListener('click', () => {
+  detailPanel.classList.remove('open');
+});
+
+// ============================================================
+// TOOLTIP
+// ============================================================
+const tooltip = document.getElementById('tooltip');
+
+function showTooltip(e, data) {
+  tooltip.innerHTML = `
+    <div class="tooltip-name">${data.num ? data.num + ' · ' : ''}${data.name}</div>
+    ${data.def ? `<div>${data.def}</div>` : ''}
+  `;
+  tooltip.classList.add('visible');
+  moveTooltip(e);
+}
+
+function moveTooltip(e) {
+  const offset = 14;
+  let x = e.clientX + offset;
+  let y = e.clientY + offset;
+  const rect = tooltip.getBoundingClientRect();
+  if (x + rect.width > window.innerWidth) x = e.clientX - rect.width - offset;
+  if (y + rect.height > window.innerHeight) y = e.clientY - rect.height - offset;
+  tooltip.style.left = x + 'px';
+  tooltip.style.top = y + 'px';
+}
+
+function hideTooltip() {
+  tooltip.classList.remove('visible');
+}
+
+// ============================================================
+// PAN & ZOOM
+// ============================================================
+const canvas = document.getElementById('canvas');
+const container = document.getElementById('canvas-container');
+
+let scale = 0.5;
+let panX = 0, panY = 0;
+let isDragging = false;
+let dragStartX, dragStartY;
+
+function applyTransform() {
+  canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+}
+applyTransform();
+
+container.addEventListener('mousedown', (e) => {
+  isDragging = true;
+  dragStartX = e.clientX - panX;
+  dragStartY = e.clientY - panY;
+  hideHint();
+});
+
+window.addEventListener('mousemove', (e) => {
+  if (!isDragging) return;
+  panX = e.clientX - dragStartX;
+  panY = e.clientY - dragStartY;
+  applyTransform();
+});
+
+window.addEventListener('mouseup', () => {
+  isDragging = false;
+});
+
+container.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const delta = e.deltaY > 0 ? 0.9 : 1.1;
+  const newScale = Math.max(0.15, Math.min(3, scale * delta));
+  const mouseX = e.clientX - panX;
+  const mouseY = e.clientY - panY;
+  panX -= mouseX * (newScale / scale - 1);
+  panY -= mouseY * (newScale / scale - 1);
+  scale = newScale;
+  applyTransform();
+  hideHint();
+}, { passive: false });
+
+document.getElementById('zoom-in').addEventListener('click', () => {
+  scale = Math.min(3, scale * 1.2);
+  applyTransform();
+});
+document.getElementById('zoom-out').addEventListener('click', () => {
+  scale = Math.max(0.15, scale / 1.2);
+  applyTransform();
+});
+document.getElementById('reset').addEventListener('click', () => {
+  scale = 0.5;
+  panX = 0;
+  panY = 0;
+  applyTransform();
+});
+
+// Touch support
+let touchStartX, touchStartY, touchInitialDist = 0, touchInitialScale = 0.5;
+container.addEventListener('touchstart', (e) => {
+  if (e.touches.length === 1) {
+    isDragging = true;
+    touchStartX = e.touches[0].clientX - panX;
+    touchStartY = e.touches[0].clientY - panY;
+  } else if (e.touches.length === 2) {
+    isDragging = false;
+    touchInitialDist = Math.hypot(
+      e.touches[0].clientX - e.touches[1].clientX,
+      e.touches[0].clientY - e.touches[1].clientY
+    );
+    touchInitialScale = scale;
+  }
+});
+container.addEventListener('touchmove', (e) => {
+  e.preventDefault();
+  if (e.touches.length === 1 && isDragging) {
+    panX = e.touches[0].clientX - touchStartX;
+    panY = e.touches[0].clientY - touchStartY;
+    applyTransform();
+  } else if (e.touches.length === 2) {
+    const dist = Math.hypot(
+      e.touches[0].clientX - e.touches[1].clientX,
+      e.touches[0].clientY - e.touches[1].clientY
+    );
+    scale = Math.max(0.15, Math.min(3, touchInitialScale * (dist / touchInitialDist)));
+    applyTransform();
+  }
+}, { passive: false });
+container.addEventListener('touchend', () => {
+  isDragging = false;
+});
+
+// Hint hide after 5s
+function hideHint() {
+  document.getElementById('hint').classList.add('hidden');
+}
+setTimeout(hideHint, 6000);
+
+// ============================================================
+// ИНИЦИАЛИЗАЦИЯ
+// ============================================================
+drawCycleArrows();
+drawCenter();
+drawBranches();
+
+// Регистрируем все узлы для поиска
+function registerAll() {
+  allNodes.set(ontology.center.num, ontology.center);
+  ontology.center.inner.forEach(i => allNodes.set(i.num, i));
+  ontology.branches.forEach(b => {
+    allNodes.set(b.num, b);
+    b.sub.forEach(s => {
+      allNodes.set(s.num, s);
+      s.leaves.forEach(l => allNodes.set(l.num, l));
+    });
+  });
+}
+registerAll();
+</script>
+
+</body>
+</html>
